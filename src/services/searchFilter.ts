@@ -64,8 +64,10 @@ export function filterAndSortGames(
         return false;
       }
     }
-    if (game.weight < filters.weightRange[0] || game.weight > filters.weightRange[1]) {
-      return false;
+    if (filters.weightRange[0] > 1.0 || filters.weightRange[1] < 5.0) {
+      if (game.weight < filters.weightRange[0] || game.weight > filters.weightRange[1]) {
+        return false;
+      }
     }
 
     // 6. Play Time / Duration Bracket
@@ -111,8 +113,8 @@ export function filterAndSortGames(
     }
 
     // 10. Year Filter
-    if (game.year !== null) {
-      if (game.year < filters.yearRange[0] || game.year > filters.yearRange[1]) {
+    if (filters.yearRange[0] > 1950 || filters.yearRange[1] < 2030) {
+      if (game.year !== null && game.year > 0 && (game.year < filters.yearRange[0] || game.year > filters.yearRange[1])) {
         return false;
       }
     }

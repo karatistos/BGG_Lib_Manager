@@ -29,11 +29,35 @@ function parsePlayerList(str: string | undefined): number[] {
   return Array.from(new Set(nums)).sort((a, b) => a - b);
 }
 
+function getField(row: Record<string, string>, ...keys: string[]): string {
+  // 1. Direct key match
+  for (const k of keys) {
+    if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') {
+      return String(row[k]).trim();
+    }
+  }
+
+  // 2. Normalized case-insensitive & punctuation-insensitive match
+  const rowCleanMap = new Map<string, string>();
+  for (const [k, v] of Object.entries(row)) {
+    const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+    rowCleanMap.set(cleanKey, v ? String(v).trim() : '');
+  }
+
+  for (const k of keys) {
+    const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const found = rowCleanMap.get(cleanK);
+    if (found) return found;
+  }
+
+  return '';
+}
+
 export function parseBggCsv(csvContent: string): GameRecord[] {
   const result = Papa.parse<Record<string, string>>(csvContent.trim(), {
     header: true,
     skipEmptyLines: 'greedy',
-    dynamicTyping: false, // Parse strings first to avoid NaN/null surprises
+    dynamicTyping: false,
   });
 
   if (result.errors && result.errors.length > 0) {
@@ -43,38 +67,40 @@ export function parseBggCsv(csvContent: string): GameRecord[] {
   const records: GameRecord[] = [];
 
   for (const row of result.data) {
-    const name = (row.objectname || row.originalname || '').trim();
+    const name = getField(row, 'objectname', 'originalname', 'name', 'title', 'game');
     if (!name) continue;
 
-    const id = parseInt(row.objectid || '0', 10);
-    const year = parseInt(row.yearpublished || '0', 10) || null;
-    const rawType = (row.itemtype || '').toLowerCase();
+    const id = parseInt(getField(row, 'objectid', 'id', 'gameid', 'collid', 'itemid') || '0', 10);
+    const yearRaw = parseInt(getField(row, 'yearpublished', 'year', 'year_published') || '0', 10);
+    const year = yearRaw > 0 ? yearRaw : null;
+
+    const rawType = getField(row, 'itemtype', 'subtype', 'objecttype', 'type').toLowerCase();
     const type: ItemType = rawType.includes('expansion') ? 'expansion' : 'standalone';
 
-    const rankRaw = parseInt(row.rank || '0', 10);
+    const rankRaw = parseInt(getField(row, 'rank', 'bggrank', 'overallrank') || '0', 10);
     const rank = rankRaw > 0 ? rankRaw : null;
 
-    const rating = parseFloat(row.average || '0') || 0;
-    const geekRating = parseFloat(row.baverage || '0') || 0;
-    const weight = parseFloat(row.avgweight || '0') || 0;
+    const rating = parseFloat(getField(row, 'average', 'rating', 'userrating') || '0') || 0;
+    const geekRating = parseFloat(getField(row, 'baverage', 'geekrating', 'bayesaverage') || '0') || 0;
+    const weight = parseFloat(getField(row, 'avgweight', 'weight', 'complexity') || '0') || 0;
 
-    const minPlayers = parseInt(row.minplayers || '1', 10) || 1;
-    const maxPlayers = parseInt(row.maxplayers || String(minPlayers), 10) || minPlayers;
+    const minPlayers = parseInt(getField(row, 'minplayers', 'min_players', 'players_min') || '1', 10) || 1;
+    const maxPlayers = parseInt(getField(row, 'maxplayers', 'max_players', 'players_max') || String(minPlayers), 10) || minPlayers;
 
-    const bestPlayers = parsePlayerList(row.bggbestplayers);
-    const recPlayers = parsePlayerList(row.bggrecplayers);
+    const bestPlayers = parsePlayerList(getField(row, 'bggbestplayers', 'bestplayers', 'best_players'));
+    const recPlayers = parsePlayerList(getField(row, 'bggrecplayers', 'recplayers', 'recommended_players'));
 
-    const playTime = parseInt(row.playingtime || '0', 10) || 0;
-    const minPlayTime = parseInt(row.minplaytime || '0', 10) || playTime;
-    const maxPlayTime = parseInt(row.maxplaytime || '0', 10) || playTime;
+    const playTime = parseInt(getField(row, 'playingtime', 'playtime', 'duration', 'time') || '0', 10) || 0;
+    const minPlayTime = parseInt(getField(row, 'minplaytime', 'min_play_time') || '0', 10) || playTime;
+    const maxPlayTime = parseInt(getField(row, 'maxplaytime', 'max_play_time') || '0', 10) || playTime;
 
-    const comment = (row.comment || '').trim();
-    const privateComment = (row.privatecomment || '').trim();
-    const invLocation = (row.invlocation || '').trim();
-    const age = (row.bggrecagerange || '').trim();
-    const languageDependence = (row.bgglanguagedependence || '').trim();
-    const numOwned = parseInt(row.numowned || '0', 10) || 0;
-    const originalName = (row.originalname || '').trim();
+    const comment = getField(row, 'comment', 'notes', 'usercomment');
+    const privateComment = getField(row, 'privatecomment', 'privatenotes');
+    const invLocation = getField(row, 'invlocation', 'location', 'shelf', 'storage');
+    const age = getField(row, 'bggrecagerange', 'age', 'minage');
+    const languageDependence = getField(row, 'bgglanguagedependence', 'languagedependence', 'language');
+    const numOwned = parseInt(getField(row, 'numowned', 'owned') || '0', 10) || 0;
+    const originalName = getField(row, 'originalname', 'altname') || name;
 
     const searchTokens = `${name} ${originalName} ${comment} ${invLocation} ${year || ''}`.toLowerCase();
 
@@ -109,4 +135,3 @@ export function parseBggCsv(csvContent: string): GameRecord[] {
 
   return records;
 }
-

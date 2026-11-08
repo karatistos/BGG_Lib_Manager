@@ -22,43 +22,45 @@ export const CURATED_MECHANICS_SEED: Record<number, { mechanics: string[]; categ
 };
 
 /**
- * Parses BGG XML API2 response string into EnrichedMetadata objects
+ * Fetches single item from Geekdo API (tries /api/geekitem first, then CORS proxy)
  */
-export function parseBggXmlResponse(xmlText: string): EnrichedMetadata[] {
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
-  const items = xmlDoc.querySelectorAll('item, thing');
-  const results: EnrichedMetadata[] = [];
+async function fetchGeekItem(id: number): Promise<EnrichedMetadata | null> {
+  try {
+    let json: any = null;
 
-  items.forEach((item) => {
-    const idAttr = item.getAttribute('id');
-    if (!idAttr) return;
-    const id = parseInt(idAttr, 10);
-    if (isNaN(id) || id <= 0) return;
-
-    const thumbnailEl = item.querySelector('thumbnail');
-    const imageEl = item.querySelector('image');
-
-    const thumbnail = thumbnailEl?.textContent?.trim() || undefined;
-    const image = imageEl?.textContent?.trim() || undefined;
-
-    const mechanics: string[] = [];
-    const categories: string[] = [];
-
-    const links = item.querySelectorAll('link');
-    links.forEach((link) => {
-      const type = link.getAttribute('type');
-      const value = link.getAttribute('value');
-      if (type === 'boardgamemechanic' && value) {
-        mechanics.push(value);
-      } else if (type === 'boardgamecategory' && value) {
-        categories.push(value);
+    // 1. Try Vercel Serverless Function first
+    try {
+      const resp = await fetch(`/api/geekitem?id=${id}`, { signal: AbortSignal.timeout(5000) });
+      if (resp.ok) {
+        json = await resp.json();
       }
-    });
+    } catch {
+      json = null;
+    }
 
-    const description = item.querySelector('description')?.textContent?.trim() || undefined;
+    // 2. If Vercel API is not available (local Vite dev or non-Vercel), use public CORS proxy
+    if (!json || !json.item) {
+      const geekUrl = `https://api.geekdo.com/api/geekitems?objectid=${id}&objecttype=thing`;
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(geekUrl)}`;
+      const proxyResp = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+      if (proxyResp.ok) {
+        const text = await proxyResp.text();
+        json = JSON.parse(text);
+      }
+    }
 
-    results.push({
+    if (!json || !json.item) return null;
+
+    const item = json.item;
+    const images = item.images || {};
+    const thumbnail = images.previewthumb || images.square200 || images.thumb || images.micro;
+    const image = images.original || images.previewthumb || images.thumb;
+
+    const mechanics = (item.links?.boardgamemechanic || []).map((x: any) => x.name).filter(Boolean);
+    const categories = (item.links?.boardgamecategory || []).map((x: any) => x.name).filter(Boolean);
+    const description = item.description || item.short_description || undefined;
+
+    return {
       id,
       thumbnail,
       image,
@@ -66,27 +68,27 @@ export function parseBggXmlResponse(xmlText: string): EnrichedMetadata[] {
       categories,
       description,
       updatedAt: Date.now(),
-    });
-  });
-
-  return results;
+    };
+  } catch (err) {
+    console.warn(`Could not sync game ID ${id}:`, err);
+    return null;
+  }
 }
 
 /**
- * Fetches batch metadata from BGG XML API2 for a list of game IDs
+ * Fetches batch metadata from Geekdo for a list of game IDs
  */
 export async function fetchBggMetadataBatch(
   ids: number[],
   onProgress?: (completed: number, total: number) => void
 ): Promise<EnrichedMetadata[]> {
   const allResults: EnrichedMetadata[] = [];
-  const chunkSize = 20; // BGG API recommendation: batches of 20 items
   const cachedMap = getCachedMetadataMap();
 
-  // Find IDs not cached or older than 30 days
+  // Find IDs not cached or missing thumbnail/mechanics
   const idsToFetch = ids.filter((id) => {
     const cached = cachedMap[id];
-    return !cached || !cached.mechanics || cached.mechanics.length === 0;
+    return !cached || !cached.thumbnail || !cached.mechanics || cached.mechanics.length === 0;
   });
 
   if (idsToFetch.length === 0) {
@@ -95,51 +97,33 @@ export async function fetchBggMetadataBatch(
   }
 
   let completedCount = ids.length - idsToFetch.length;
+  if (onProgress) onProgress(completedCount, ids.length);
 
-  for (let i = 0; i < idsToFetch.length; i += chunkSize) {
-    const batch = idsToFetch.slice(i, i + chunkSize);
-    const url = `https://boardgamegeek.com/xmlapi2/thing?id=${batch.join(',')}&stats=1`;
+  const concurrency = 3;
+  for (let i = 0; i < idsToFetch.length; i += concurrency) {
+    const chunk = idsToFetch.slice(i, i + concurrency);
+    const results = await Promise.all(chunk.map((id) => fetchGeekItem(id)));
 
-    let xmlText = '';
-    try {
-      // Direct fetch attempt
-      const resp = await fetch(url);
-      if (resp.status === 200) {
-        xmlText = await resp.text();
-      } else if (resp.status === 202) {
-        // BGG queued request, wait 1.5s
-        await new Promise((r) => setTimeout(r, 1500));
-        const retryResp = await fetch(url);
-        xmlText = await retryResp.text();
+    const validResults: EnrichedMetadata[] = [];
+    results.forEach((res) => {
+      if (res) {
+        validResults.push(res);
+        allResults.push(res);
       }
-    } catch {
-      // CORS fallback using public proxy
-      try {
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-        const proxyResp = await fetch(proxyUrl);
-        if (proxyResp.ok) {
-          xmlText = await proxyResp.text();
-        }
-      } catch (proxyErr) {
-        console.warn(`Could not fetch batch ${batch.join(',')}`, proxyErr);
-      }
+    });
+
+    if (validResults.length > 0) {
+      updateCachedMetadataBatch(validResults);
     }
 
-    if (xmlText) {
-      const parsed = parseBggXmlResponse(xmlText);
-      allResults.push(...parsed);
-      updateCachedMetadataBatch(parsed);
-    }
-
-    completedCount += batch.length;
+    completedCount += chunk.length;
     if (onProgress) onProgress(Math.min(completedCount, ids.length), ids.length);
 
-    // Polite BGG API delay between batches
-    if (i + chunkSize < idsToFetch.length) {
-      await new Promise((r) => setTimeout(r, 600));
+    // Short polite pause between chunks
+    if (i + concurrency < idsToFetch.length) {
+      await new Promise((r) => setTimeout(r, 200));
     }
   }
 
   return allResults;
 }
-

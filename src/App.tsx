@@ -144,13 +144,16 @@ export const App: React.FC = () => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const content = e.target?.result as string;
-      if (content && content.includes('objectname')) {
-        saveCustomCsv(content);
-        setCsvRaw(content);
-        setIsCustomLoaded(true);
-      } else {
-        alert('Invalid BGG CSV file. Please make sure it is exported from BoardGameGeek.');
+      if (content) {
+        const records = parseBggCsv(content);
+        if (records.length > 0) {
+          saveCustomCsv(content);
+          setCsvRaw(content);
+          setIsCustomLoaded(true);
+          return;
+        }
       }
+      alert('Could not detect valid game records in this CSV. Please make sure it contains game names or is exported from BoardGameGeek.');
     };
     reader.readAsText(file);
   };

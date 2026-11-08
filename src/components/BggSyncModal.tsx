@@ -25,9 +25,10 @@ export const BggSyncModal: React.FC<BggSyncModalProps> = ({
 
   const cachedMap = getCachedMetadataMap();
   const cachedCount = Object.keys(cachedMap).length;
-  const uncachedGames = games.filter((g) => !cachedMap[g.id] || !cachedMap[g.id].mechanics?.length);
+  const uncachedGames = games.filter((g) => g.id > 0 && (!cachedMap[g.id] || !cachedMap[g.id].thumbnail));
 
   const startSync = async () => {
+    if (uncachedGames.length === 0) return;
     setSyncing(true);
     setErrorMsg(null);
     setProgress({ completed: 0, total: uncachedGames.length });
@@ -40,7 +41,7 @@ export const BggSyncModal: React.FC<BggSyncModalProps> = ({
       onSyncComplete();
     } catch (err: any) {
       console.error(err);
-      setErrorMsg('Failed to sync some items. BGG API may be rate limiting or temporarily unreachable.');
+      setErrorMsg('Sync paused or reached limit. You can click Start Sync again to resume.');
     } finally {
       setSyncing(false);
     }
