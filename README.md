@@ -69,3 +69,4 @@ Because this application is 100% client-side, you can host it for free on **Verc
 2. Sign in to [Vercel](https://vercel.com) or [Netlify](https://netlify.com) with GitHub.
 3. Select your repository and click **Deploy**.
 4. Share the generated link with your friends! Each person can use the app with their own BGG export by clicking **"Import CSV"**.
+
