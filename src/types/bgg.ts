@@ -34,7 +34,10 @@ export interface GameRecord {
   mechanics?: string[];    // BGG mechanics: "Worker Placement", "Deck Building", etc.
   categories?: string[];   // BGG categories: "Economic", "Fantasy", etc.
   searchTokens: string;    // Precomputed lowercase string for fuzzy matching
+  owners?: { userId: string; userName: string; avatarColor: string }[]; // Group members who own this game
 }
+
+export type LibraryScope = 'user' | 'group';
 
 export type ViewMode = 'grid' | 'table';
 
@@ -89,6 +92,7 @@ export interface UserProfile {
   bio?: string;
   isPublic: boolean;   // if true, other group members can browse their library in read-only mode
   passwordHash?: string; // SHA-256 hashed password/PIN to protect account & profile editing
+  role?: 'admin' | 'user'; // 'admin' grants super admin control over all profiles and settings
   createdAt: number;
 }
 

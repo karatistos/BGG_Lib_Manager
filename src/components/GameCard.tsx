@@ -2,7 +2,7 @@ import React from 'react';
 import { GameRecord } from '../types/bgg';
 import { WeightBadge, PlayerBadge, DurationBadge, RankBadge, TypeBadge, LanguageBadge } from './Badge';
 import { ProceduralCover } from './ProceduralCover';
-import { Star, MapPin, Tag, ExternalLink } from 'lucide-react';
+import { Star, MapPin, Tag, ExternalLink, Users } from 'lucide-react';
 
 interface GameCardProps {
   game: GameRecord;
@@ -135,6 +135,27 @@ export const GameCard: React.FC<GameCardProps> = ({
               <MapPin className="w-3 h-3 text-orange-400/80 shrink-0" />
               <span className="truncate">
                 {game.invLocation || game.comment}
+              </span>
+            </div>
+          )}
+
+          {/* Club Owners indicator */}
+          {game.owners && game.owners.length > 0 && (
+            <div className="flex items-center gap-1.5 pt-1.5 border-t border-slate-800/40 text-[11px]">
+              <Users className="w-3 h-3 text-orange-400 shrink-0" />
+              <div className="flex items-center -space-x-1 overflow-hidden shrink-0">
+                {game.owners.map((owner) => (
+                  <span
+                    key={owner.userId}
+                    title={`${owner.userName} has this copy`}
+                    className={`w-4 h-4 rounded-full ${owner.avatarColor} border border-slate-900 flex items-center justify-center text-[8px] font-bold`}
+                  >
+                    {owner.userName.slice(0, 1).toUpperCase()}
+                  </span>
+                ))}
+              </div>
+              <span className="text-[10px] text-slate-300 truncate">
+                {game.owners.map((o) => o.userName.replace(/\s*\(.*?\)/g, '')).join(', ')}
               </span>
             </div>
           )}

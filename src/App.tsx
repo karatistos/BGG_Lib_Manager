@@ -1,7 +1,15 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import defaultCsvContent from '../collection.csv?raw';
 import defaultCoversData from './data/bggCovers.json';
-import { GameRecord, FilterState, ViewMode, SortField, SortOrder, UserProfile } from './types/bgg';
+import {
+  GameRecord,
+  FilterState,
+  ViewMode,
+  SortField,
+  SortOrder,
+  UserProfile,
+  LibraryScope,
+} from './types/bgg';
 import { parseBggCsv } from './services/csvParser';
 import {
   getCustomCsv,
@@ -15,6 +23,7 @@ import {
   saveUserCsv,
   getAllMeetings,
   getAllMessages,
+  getAllUsers,
 } from './services/communityStorage';
 import { CURATED_MECHANICS_SEED } from './services/bggApi';
 import { filterAndSortGames, computeCollectionMetrics } from './services/searchFilter';
@@ -30,7 +39,7 @@ import { AnalyticsModal } from './components/AnalyticsModal';
 import { AuthModal } from './components/AuthModal';
 import { CommunityModal } from './components/CommunityModal';
 import { MeetingModal } from './components/MeetingModal';
-import { SlidersHorizontal, Lock, ArrowLeft } from 'lucide-react';
+import { SlidersHorizontal, Lock, ArrowLeft, Globe } from 'lucide-react';
 
 const INITIAL_FILTERS: FilterState = {
   searchQuery: '',
@@ -48,10 +57,45 @@ const INITIAL_FILTERS: FilterState = {
   yearRange: [1950, 2030],
 };
 
+function enrichGameRecord(
+  game: GameRecord,
+  cachedMap: Record<number, any>,
+  owner?: { userId: string; userName: string; avatarColor: string }
+): GameRecord {
+  const staticCover = (defaultCoversData as Record<string, any>)[game.id];
+  const cached = cachedMap[game.id] || staticCover;
+  const seed = CURATED_MECHANICS_SEED[game.id];
+
+  const thumbnail = cached?.thumbnail || seed?.thumbnail || game.thumbnail;
+  const image = cached?.image || game.image;
+  const description = cached?.description || game.description;
+  const shortDescription = cached?.shortDescription || game.shortDescription;
+  const mechanics =
+    cached?.mechanics && cached.mechanics.length > 0
+      ? cached.mechanics
+      : seed?.mechanics || game.mechanics || [];
+  const categories =
+    cached?.categories && cached.categories.length > 0
+      ? cached.categories
+      : seed?.categories || game.categories || [];
+
+  return {
+    ...game,
+    thumbnail,
+    image,
+    description,
+    shortDescription,
+    mechanics,
+    categories,
+    owners: owner ? [owner] : game.owners || [],
+  };
+}
+
 export const App: React.FC = () => {
   // Current user & active library session
   const [currentUser, setCurrentUser] = useState<UserProfile>(() => getCurrentUser());
   const [activeLibraryUser, setActiveLibraryUser] = useState<UserProfile | null>(null);
+  const [libraryScope, setLibraryScope] = useState<LibraryScope>('user');
 
   // Community & Meeting & Auth Modals
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -71,6 +115,7 @@ export const App: React.FC = () => {
   const handleUserChange = (user: UserProfile) => {
     setCurrentUser(user);
     setActiveLibraryUser(null);
+    setLibraryScope('user');
     const userSaved = getUserCsv(user.id);
     if (userSaved) {
       setCsvRaw(userSaved);
@@ -82,6 +127,7 @@ export const App: React.FC = () => {
   };
 
   const handleBrowseUserLibrary = (user: UserProfile) => {
+    setLibraryScope('user');
     if (user.id === currentUser.id) {
       setActiveLibraryUser(null);
       const userSaved = getUserCsv(user.id);
@@ -97,49 +143,75 @@ export const App: React.FC = () => {
 
   const handleReturnToMyLibrary = () => {
     setActiveLibraryUser(null);
+    setLibraryScope('user');
     const myCsv = getUserCsv(currentUser.id) || getCustomCsv() || defaultCsvContent;
     setCsvRaw(myCsv);
     setIsCustomLoaded(!!(getUserCsv(currentUser.id) || getCustomCsv()));
   };
 
-  // Parse and enrich base games
-  const rawGames = useMemo<GameRecord[]>(() => {
+  // 1. Single User Collection (enriched with active owner)
+  const userGames = useMemo<GameRecord[]>(() => {
     const parsed = parseBggCsv(csvRaw);
     const cachedMap = getCachedMetadataMap();
+    const activeUser = activeLibraryUser || currentUser;
+    const ownerEntry = {
+      userId: activeUser.id,
+      userName: activeUser.displayName,
+      avatarColor: activeUser.avatarColor,
+    };
 
-    // Enrich with static BGG data, cached BGG metadata or seeded curated data
-    return parsed.map((game) => {
-      const staticCover = (defaultCoversData as Record<string, any>)[game.id];
-      const cached = cachedMap[game.id] || staticCover;
-      const seed = CURATED_MECHANICS_SEED[game.id];
+    return parsed.map((game) => enrichGameRecord(game, cachedMap, ownerEntry));
+  }, [csvRaw, metadataVersion, activeLibraryUser, currentUser]);
 
-      const thumbnail = cached?.thumbnail || seed?.thumbnail || game.thumbnail;
-      const image = cached?.image || game.image;
-      const description = cached?.description || game.description;
-      const shortDescription = cached?.shortDescription || game.shortDescription;
-      const mechanics = (cached?.mechanics && cached.mechanics.length > 0)
-        ? cached.mechanics
-        : (seed?.mechanics || game.mechanics || []);
-      const categories = (cached?.categories && cached.categories.length > 0)
-        ? cached.categories
-        : (seed?.categories || game.categories || []);
+  // 2. Club Super Library: Aggregated games from all public members with merged owner tags
+  const groupGames = useMemo<GameRecord[]>(() => {
+    const cachedMap = getCachedMetadataMap();
+    const allPublicUsers = getAllUsers().filter((u) => u.isPublic);
+    const masterMap = new Map<string | number, GameRecord>();
 
-      return {
-        ...game,
-        thumbnail,
-        image,
-        description,
-        shortDescription,
-        mechanics,
-        categories,
+    for (const user of allPublicUsers) {
+      const userRaw =
+        getUserCsv(user.id) ||
+        (user.id === 'user_admin' || user.id === 'user_host' ? defaultCsvContent : null);
+      if (!userRaw) continue;
+
+      const parsed = parseBggCsv(userRaw);
+      const ownerEntry = {
+        userId: user.id,
+        userName: user.displayName,
+        avatarColor: user.avatarColor,
       };
-    });
-  }, [csvRaw, metadataVersion]);
 
-  // Extract all unique mechanics across the loaded games
+      for (const rawGame of parsed) {
+        const enriched = enrichGameRecord(rawGame, cachedMap, ownerEntry);
+        const key = enriched.id > 0 ? enriched.id : enriched.name.toLowerCase().trim();
+
+        if (masterMap.has(key)) {
+          const existing = masterMap.get(key)!;
+          const alreadyHasOwner = existing.owners?.some((o) => o.userId === user.id);
+          if (!alreadyHasOwner) {
+            existing.owners = [...(existing.owners || []), ownerEntry];
+          }
+          if (!existing.thumbnail && enriched.thumbnail) existing.thumbnail = enriched.thumbnail;
+          if (!existing.description && enriched.description) existing.description = enriched.description;
+        } else {
+          masterMap.set(key, { ...enriched });
+        }
+      }
+    }
+
+    return Array.from(masterMap.values());
+  }, [metadataVersion, csvRaw]);
+
+  // Active games set depending on library scope
+  const activeGames = useMemo(() => {
+    return libraryScope === 'group' ? groupGames : userGames;
+  }, [libraryScope, groupGames, userGames]);
+
+  // Extract all unique mechanics across the active loaded games
   const availableMechanics = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const g of rawGames) {
+    for (const g of activeGames) {
       if (g.mechanics) {
         for (const m of g.mechanics) {
           map[m] = (map[m] || 0) + 1;
@@ -147,7 +219,7 @@ export const App: React.FC = () => {
       }
     }
     return Object.keys(map).sort((a, b) => map[b] - map[a]);
-  }, [rawGames]);
+  }, [activeGames]);
 
   // UI state
   const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
@@ -162,13 +234,13 @@ export const App: React.FC = () => {
 
   // Filter and sort execution
   const filteredGames = useMemo(() => {
-    return filterAndSortGames(rawGames, filters, sortField, sortOrder);
-  }, [rawGames, filters, sortField, sortOrder]);
+    return filterAndSortGames(activeGames, filters, sortField, sortOrder);
+  }, [activeGames, filters, sortField, sortOrder]);
 
-  // Overall collection metrics (computed from current filtered set or full collection)
+  // Overall collection metrics
   const collectionMetrics = useMemo(() => {
-    return computeCollectionMetrics(rawGames);
-  }, [rawGames]);
+    return computeCollectionMetrics(activeGames);
+  }, [activeGames]);
 
   const handleFilterChange = useCallback((newFilters: Partial<FilterState>) => {
     setFilters((prev) => ({ ...prev, ...newFilters }));
@@ -199,7 +271,15 @@ export const App: React.FC = () => {
 
   const handleFileUpload = (file: File) => {
     if (activeLibraryUser && activeLibraryUser.id !== currentUser.id) {
-      alert(`You are currently browsing ${activeLibraryUser.displayName}'s library in Read-Only mode. Switch back to your library to upload custom files.`);
+      alert(
+        `You are currently browsing ${activeLibraryUser.displayName}'s library in Read-Only mode. Switch back to your library to upload custom files.`
+      );
+      return;
+    }
+    if (libraryScope === 'group') {
+      alert(
+        'Switch to "My Library" to upload files to your personal collection.'
+      );
       return;
     }
     const reader = new FileReader();
@@ -215,7 +295,9 @@ export const App: React.FC = () => {
           return;
         }
       }
-      alert('Could not detect valid game records in this CSV. Please make sure it contains game names or is exported from BoardGameGeek.');
+      alert(
+        'Could not detect valid game records in this CSV. Please make sure it contains game names or is exported from BoardGameGeek.'
+      );
     };
     reader.readAsText(file);
   };
@@ -247,7 +329,7 @@ export const App: React.FC = () => {
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('drop', handleDrop);
     };
-  }, [activeLibraryUser, currentUser]);
+  }, [activeLibraryUser, currentUser, libraryScope]);
 
   const cachedMetadataMap = getCachedMetadataMap();
   const cachedCount = Object.keys(cachedMetadataMap).length;
@@ -283,16 +365,45 @@ export const App: React.FC = () => {
         onReturnToMyLibrary={handleReturnToMyLibrary}
         upcomingMeetingsCount={getAllMeetings().length}
         messagesCount={getAllMessages().length}
+        libraryScope={libraryScope}
+        onLibraryScopeChange={(scope) => {
+          setLibraryScope(scope);
+          if (scope === 'group') {
+            setActiveLibraryUser(null);
+          }
+        }}
+        groupGamesCount={groupGames.length}
       />
 
+      {/* Club Super Library Banner */}
+      {libraryScope === 'group' && (
+        <div className="bg-emerald-950/70 border-b border-emerald-500/30 px-4 py-2.5 backdrop-blur-md animate-in slide-in-from-top-1 duration-200">
+          <div className="max-w-[1700px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-emerald-200">
+              <Globe className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>
+                <strong>Club Super Collection</strong> ({groupGames.length} unique titles across public members) • Combined library from all shared club members. Cards display owner chips showing who owns each copy.
+              </span>
+            </div>
+            <button
+              onClick={() => setLibraryScope('user')}
+              className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold flex items-center gap-1.5 transition-all shadow-sm shrink-0"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to My Library</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Read-Only Banner when browsing another member's library */}
-      {isReadOnlyLibrary && activeLibraryUser && (
+      {libraryScope === 'user' && isReadOnlyLibrary && activeLibraryUser && (
         <div className="bg-amber-950/70 border-b border-amber-500/30 px-4 py-2.5 backdrop-blur-md animate-in slide-in-from-top-1 duration-200">
           <div className="max-w-[1700px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2 text-amber-200">
               <Lock className="w-4 h-4 text-amber-400 shrink-0" />
               <span>
-                Viewing <strong>{activeLibraryUser.displayName}'s Collection</strong> ({rawGames.length} games) •{' '}
+                Viewing <strong>{activeLibraryUser.displayName}'s Collection</strong> ({userGames.length} games) •{' '}
                 <span className="text-amber-300 font-semibold">🔒 Read-Only</span> — You can browse, filter, and view rulebooks/notes, but cannot edit this library.
               </span>
             </div>
@@ -325,7 +436,7 @@ export const App: React.FC = () => {
             <span>{mobileFilterOpen ? 'Hide Filters' : 'Show Filters & Facets'}</span>
           </button>
           <span className="text-xs text-slate-400">
-            {filteredGames.length} of {rawGames.length} games
+            {filteredGames.length} of {activeGames.length} games
           </span>
         </div>
 
@@ -374,15 +485,15 @@ export const App: React.FC = () => {
         game={selectedGame}
         onClose={() => setSelectedGame(null)}
         onSelectMechanic={handleSelectMechanic}
-        allGames={rawGames}
+        allGames={activeGames}
         onSelectGame={(g) => setSelectedGame(g)}
-        isReadOnly={isReadOnlyLibrary}
+        isReadOnly={libraryScope === 'user' && isReadOnlyLibrary}
         ownerName={activeLibraryUser?.displayName || currentUser.displayName}
       />
 
       {/* 4. Game Night Picker (Dice roll with in-modal group filters) */}
       <RandomGameModal
-        allGames={rawGames}
+        allGames={activeGames}
         isOpen={isRandomModalOpen}
         onClose={() => setIsRandomModalOpen(false)}
         onSelectGame={(g) => setSelectedGame(g)}
@@ -392,7 +503,7 @@ export const App: React.FC = () => {
 
       {/* 5. Collection Shelf Analytics Modal */}
       <AnalyticsModal
-        games={rawGames}
+        games={activeGames}
         metrics={collectionMetrics}
         isOpen={isAnalyticsOpen}
         onClose={() => setIsAnalyticsOpen(false)}
@@ -403,7 +514,7 @@ export const App: React.FC = () => {
 
       {/* 6. BGG Box Art & Mechanics Sync Dialog */}
       <BggSyncModal
-        games={rawGames}
+        games={activeGames}
         isOpen={isSyncModalOpen}
         onClose={() => setIsSyncModalOpen(false)}
         onSyncComplete={handleSyncComplete}
@@ -422,7 +533,7 @@ export const App: React.FC = () => {
         isOpen={isCommunityModalOpen}
         onClose={() => setIsCommunityModalOpen(false)}
         currentUser={currentUser}
-        allGames={rawGames}
+        allGames={activeGames}
         onBrowseUserLibrary={handleBrowseUserLibrary}
         initialTab={communityTab}
       />
@@ -432,7 +543,7 @@ export const App: React.FC = () => {
         isOpen={isMeetingModalOpen}
         onClose={() => setIsMeetingModalOpen(false)}
         currentUser={currentUser}
-        allGames={rawGames}
+        allGames={activeGames}
       />
     </div>
   );

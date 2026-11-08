@@ -459,6 +459,34 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                       </div>
                     </div>
                   )}
+
+                  {/* Club Copies & Owners */}
+                  {game.owners && game.owners.length > 0 && (
+                    <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-slate-200 flex items-center gap-1.5">
+                          <Users className="w-4 h-4 text-orange-400" />
+                          Club Owners & Available Copies ({game.owners.length})
+                        </span>
+                        <span className="text-[11px] text-slate-400">Available in group</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {game.owners.map((owner) => (
+                          <div
+                            key={owner.userId}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white"
+                          >
+                            <div
+                              className={`w-5 h-5 rounded-md ${owner.avatarColor} flex items-center justify-center font-bold text-[9px]`}
+                            >
+                              {owner.userName.slice(0, 2).toUpperCase()}
+                            </div>
+                            <span className="font-medium text-slate-200">{owner.userName}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

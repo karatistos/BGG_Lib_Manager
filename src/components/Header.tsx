@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { ViewMode, SortField, SortOrder, UserProfile } from '../types/bgg';
+import { ViewMode, SortField, SortOrder, UserProfile, LibraryScope } from '../types/bgg';
 import {
   Search,
   LayoutGrid,
@@ -15,6 +15,8 @@ import {
   Users,
   CalendarDays,
   ArrowLeft,
+  Globe,
+  User,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -41,6 +43,9 @@ interface HeaderProps {
   onReturnToMyLibrary: () => void;
   upcomingMeetingsCount: number;
   messagesCount: number;
+  libraryScope: LibraryScope;
+  onLibraryScopeChange: (scope: LibraryScope) => void;
+  groupGamesCount: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -67,6 +72,9 @@ export const Header: React.FC<HeaderProps> = ({
   onReturnToMyLibrary,
   upcomingMeetingsCount,
   messagesCount,
+  libraryScope,
+  onLibraryScopeChange,
+  groupGamesCount,
 }) => {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -128,6 +136,41 @@ export const Header: React.FC<HeaderProps> = ({
               <TableIcon className="w-4 h-4" />
             </button>
           </div>
+        </div>
+
+        {/* Scope Switcher: My Library vs Club Super Library */}
+        <div className="flex items-center p-1 bg-slate-900 border border-slate-800 rounded-xl text-xs font-semibold shrink-0">
+          <button
+            onClick={() => onLibraryScopeChange('user')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              libraryScope === 'user'
+                ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20 font-bold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Browse and manage your personal collection"
+          >
+            <User className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">My Library</span>
+            <span className="sm:hidden">Mine</span>
+          </button>
+          <button
+            onClick={() => onLibraryScopeChange('group')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              libraryScope === 'group'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20 font-bold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Browse all games shared across the entire club"
+          >
+            <Globe className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Club Super Library</span>
+            <span className="sm:hidden">Club</span>
+            {groupGamesCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-950/60 text-emerald-300 border border-emerald-500/30 font-mono">
+                {groupGamesCount}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Global Search Bar (Center) */}

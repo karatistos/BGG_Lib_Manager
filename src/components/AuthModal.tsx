@@ -7,6 +7,11 @@ import {
   setCurrentUserId,
   hashPassword,
   verifyPassword,
+  getClubEntryKey,
+  setClubEntryKey,
+  deleteUserByAdmin,
+  resetUserPasswordByAdmin,
+  isSuperAdmin,
 } from '../services/communityStorage';
 import {
   X,
@@ -18,6 +23,10 @@ import {
   KeyRound,
   ShieldCheck,
   AlertCircle,
+  Shield,
+  Trash2,
+  Crown,
+  Key,
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -33,7 +42,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   currentUser,
   onUserChange,
 }) => {
-  const [tab, setTab] = useState<'profile' | 'switch' | 'new'>('profile');
+  const isAdmin = isSuperAdmin(currentUser);
+  const [tab, setTab] = useState<'profile' | 'switch' | 'new' | 'admin'>('profile');
   const [users, setUsers] = useState<UserProfile[]>(getAllUsers());
 
   // Edit current profile state
@@ -55,7 +65,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [newDisplayName, setNewDisplayName] = useState('');
   const [newBggUsername, setNewBggUsername] = useState('');
   const [newAccountPin, setNewAccountPin] = useState('');
+  const [clubEntryKeyInput, setClubEntryKeyInput] = useState('');
   const [registerError, setRegisterError] = useState<string | null>(null);
+
+  // Super Admin panel state
+  const [adminClubKey, setAdminClubKey] = useState<string>(getClubEntryKey());
+  const [clubKeySaveSuccess, setClubKeySaveSuccess] = useState(false);
+  const [resetPinUserId, setResetPinUserId] = useState<string | null>(null);
+  const [resetPinValue, setResetPinValue] = useState('');
+  const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -129,6 +147,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setRegisterError(null);
     if (!newUsername.trim()) return;
 
+    // Validate Anti-Flood Registration Key
+    const currentClubKey = getClubEntryKey().trim();
+    if (clubEntryKeyInput.trim().toUpperCase() !== currentClubKey.toUpperCase()) {
+      setRegisterError(`Invalid Club Registration Key. Please ask the club administrator for the entry key.`);
+      return;
+    }
+
     if (!newAccountPin.trim()) {
       setRegisterError('Please set a PIN or password to protect your account.');
       return;
@@ -147,20 +172,57 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setNewDisplayName('');
     setNewBggUsername('');
     setNewAccountPin('');
+    setClubEntryKeyInput('');
     onClose();
+  };
+
+  const handleSaveAdminClubKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminClubKey.trim()) return;
+    setClubEntryKey(adminClubKey.trim());
+    setClubKeySaveSuccess(true);
+    setTimeout(() => setClubKeySaveSuccess(false), 2500);
+  };
+
+  const handleDeleteUser = (userId: string, name: string) => {
+    if (confirm(`Are you sure you want to delete profile "${name}" and all their associated files?`)) {
+      const success = deleteUserByAdmin(userId);
+      if (success) {
+        setUsers(getAllUsers());
+      }
+    }
+  };
+
+  const handleResetPinSubmit = async (userId: string) => {
+    if (!resetPinValue.trim()) return;
+    await resetUserPasswordByAdmin(userId, resetPinValue.trim());
+    setResetPinUserId(null);
+    setResetPinValue('');
+    setResetSuccessMessage('Password reset successfully!');
+    setUsers(getAllUsers());
+    setTimeout(() => setResetSuccessMessage(null), 3000);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-5">
+      <div className="relative w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
-            <div className={`w-9 h-9 rounded-xl ${currentUser.avatarColor} flex items-center justify-center font-bold text-sm shadow-md`}>
+            <div
+              className={`w-9 h-9 rounded-xl ${currentUser.avatarColor} flex items-center justify-center font-bold text-sm shadow-md`}
+            >
               {currentUser.displayName.slice(0, 2).toUpperCase()}
             </div>
             <div>
-              <h3 className="font-bold text-white text-base">User Account & Security</h3>
+              <div className="flex items-center gap-1.5">
+                <h3 className="font-bold text-white text-base">User Account & Security</h3>
+                {isAdmin && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/20 text-orange-400 border border-orange-500/40 flex items-center gap-1">
+                    <Crown className="w-3 h-3 text-orange-400" /> Super Admin
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-slate-400">Password protection & library permissions</p>
             </div>
           </div>
@@ -173,13 +235,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-semibold">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-semibold overflow-x-auto">
           <button
             onClick={() => {
               setTab('profile');
               setTargetUser(null);
             }}
-            className={`flex-1 py-1.5 px-3 rounded-lg transition-all ${
+            className={`flex-1 py-1.5 px-3 rounded-lg transition-all shrink-0 ${
               tab === 'profile'
                 ? 'bg-orange-500 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
@@ -192,7 +254,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               setTab('switch');
               setTargetUser(null);
             }}
-            className={`flex-1 py-1.5 px-3 rounded-lg transition-all ${
+            className={`flex-1 py-1.5 px-3 rounded-lg transition-all shrink-0 ${
               tab === 'switch'
                 ? 'bg-orange-500 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
@@ -205,7 +267,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               setTab('new');
               setTargetUser(null);
             }}
-            className={`flex-1 py-1.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-1.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 shrink-0 ${
               tab === 'new'
                 ? 'bg-orange-500 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
@@ -214,6 +276,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <UserPlus className="w-3.5 h-3.5" />
             <span>Create Account</span>
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => {
+                setTab('admin');
+                setTargetUser(null);
+              }}
+              className={`flex-1 py-1.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 shrink-0 ${
+                tab === 'admin'
+                  ? 'bg-rose-600 text-white shadow-sm'
+                  : 'text-rose-400 hover:text-rose-200 hover:bg-rose-950/30'
+              }`}
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Admin Panel</span>
+            </button>
+          )}
         </div>
 
         {/* TAB 1: EDIT PROFILE & SECURITY */}
@@ -268,7 +346,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder={currentUser.passwordHash ? 'Change PIN/Password (leave empty to keep current)' : 'Set a new PIN/Password...'}
+                placeholder={
+                  currentUser.passwordHash
+                    ? 'Change PIN/Password (leave empty to keep current)'
+                    : 'Set a new PIN/Password...'
+                }
                 className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:border-orange-500"
               />
             </div>
@@ -297,7 +379,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
                 <p className="text-[11px] text-slate-400 leading-normal">
                   {isPublic
-                    ? 'Other group members can explore your collection and view attached guides in Read-Only mode. They cannot edit your library or notes.'
+                    ? 'Other group members can explore your collection in the Club Super Library in Read-Only mode. They cannot edit your library or notes.'
                     : 'Your collection is private to your account.'}
                 </p>
               </div>
@@ -332,6 +414,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                   {users.map((u) => {
                     const isActive = u.id === currentUser.id;
+                    const isUserAdmin = isSuperAdmin(u);
                     return (
                       <div
                         key={u.id}
@@ -343,12 +426,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg ${u.avatarColor} flex items-center justify-center font-bold text-xs`}>
+                          <div
+                            className={`w-8 h-8 rounded-lg ${u.avatarColor} flex items-center justify-center font-bold text-xs`}
+                          >
                             {u.displayName.slice(0, 2).toUpperCase()}
                           </div>
                           <div>
                             <div className="text-xs font-bold flex items-center gap-1.5">
                               <span>{u.displayName}</span>
+                              {isUserAdmin && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-0.5">
+                                  <Crown className="w-2.5 h-2.5" /> Super Admin
+                                </span>
+                              )}
                               {isActive && (
                                 <span className="px-1.5 py-0.5 rounded text-[10px] bg-orange-500 text-white font-mono">
                                   Current
@@ -371,7 +461,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </>
             ) : (
               /* Inline Password Challenge Prompt */
-              <form onSubmit={handleConfirmSwitch} className="p-4 rounded-xl bg-slate-950 border border-orange-500/30 space-y-4 animate-in fade-in duration-200">
+              <form
+                onSubmit={handleConfirmSwitch}
+                className="p-4 rounded-xl bg-slate-950 border border-orange-500/30 space-y-4 animate-in fade-in duration-200"
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <KeyRound className="w-4 h-4 text-orange-400" />
@@ -399,7 +492,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     required
                   />
                   <div className="flex items-center justify-between text-[11px] text-slate-500">
-                    <span>💡 Demo profiles default PIN: <strong className="text-slate-400">1234</strong></span>
+                    {isSuperAdmin(targetUser) ? (
+                      <span>🛡️ Super Admin Master Key required</span>
+                    ) : (
+                      <span>💡 Demo profiles default PIN: <strong className="text-slate-400">1234</strong></span>
+                    )}
                   </div>
                 </div>
 
@@ -435,8 +532,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {tab === 'new' && (
           <form onSubmit={handleCreateUser} className="space-y-4">
             <p className="text-xs text-slate-400">
-              Create a password-protected profile so only you can modify your collection, rulebook attachments, and private annotations.
+              Create a protected profile. A Club Invitation Key is required to prevent flood abuse.
             </p>
+
+            {/* Anti-Flood Entry Key */}
+            <div className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/30 space-y-1.5">
+              <label className="text-xs font-bold text-orange-300 flex items-center gap-1.5">
+                <Key className="w-3.5 h-3.5 text-orange-400" />
+                <span>Club Invitation / Entry Key *</span>
+              </label>
+              <input
+                type="text"
+                value={clubEntryKeyInput}
+                onChange={(e) => setClubEntryKeyInput(e.target.value)}
+                placeholder="Enter club invitation key..."
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-orange-500 uppercase font-mono tracking-wider"
+                required
+              />
+              <p className="text-[11px] text-slate-400">
+                Obtain this key from the club organizer (Carlos M.) to register your profile.
+              </p>
+            </div>
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300">Username</label>
@@ -444,7 +560,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 type="text"
                 value={newUsername}
                 onChange={(e) => setNewUsername(e.target.value)}
-                placeholder="e.g. mateo_boardgames"
+                placeholder="e.g. juan_boardgames"
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-orange-500"
                 required
               />
@@ -456,7 +572,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 type="text"
                 value={newDisplayName}
                 onChange={(e) => setNewDisplayName(e.target.value)}
-                placeholder="e.g. Mateo D."
+                placeholder="e.g. Juan P."
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-orange-500"
               />
             </div>
@@ -469,7 +585,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 type="text"
                 value={newBggUsername}
                 onChange={(e) => setNewBggUsername(e.target.value)}
-                placeholder="e.g. mateo_bgg"
+                placeholder="e.g. juan_bgg"
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-orange-500"
               />
             </div>
@@ -507,6 +623,151 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <span>Create Protected Account & Log In</span>
             </button>
           </form>
+        )}
+
+        {/* TAB 4: SUPER ADMIN CONTROL PANEL (Only for isSuperAdmin) */}
+        {tab === 'admin' && isAdmin && (
+          <div className="space-y-5">
+            {/* Club Registration Entry Key Management */}
+            <div className="p-4 rounded-xl bg-slate-950 border border-rose-500/30 space-y-3">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-rose-400" />
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Club Anti-Flood Registration Key
+                </h4>
+              </div>
+              <p className="text-xs text-slate-400">
+                New users must provide this key to create an account. Change it anytime to prevent spam.
+              </p>
+              <form onSubmit={handleSaveAdminClubKey} className="flex gap-2">
+                <input
+                  type="text"
+                  value={adminClubKey}
+                  onChange={(e) => setAdminClubKey(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm font-mono uppercase text-white focus:outline-none focus:border-rose-500"
+                  required
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5"
+                >
+                  <Key className="w-3.5 h-3.5" />
+                  <span>Update Key</span>
+                </button>
+              </form>
+              {clubKeySaveSuccess && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
+                  <Check className="w-4 h-4" /> Registration key updated successfully!
+                </span>
+              )}
+            </div>
+
+            {/* Profile Management Table */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Club Member Profiles ({users.length})
+                </h4>
+                {resetSuccessMessage && (
+                  <span className="text-xs text-emerald-400 font-semibold">{resetSuccessMessage}</span>
+                )}
+              </div>
+
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {users.map((u) => {
+                  const isTargetAdmin = isSuperAdmin(u);
+                  const isCurrent = u.id === currentUser.id;
+
+                  return (
+                    <div
+                      key={u.id}
+                      className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-8 h-8 rounded-lg ${u.avatarColor} flex items-center justify-center font-bold text-xs shrink-0`}
+                        >
+                          {u.displayName.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                            <span>{u.displayName}</span>
+                            {isTargetAdmin && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                Admin
+                              </span>
+                            )}
+                            {u.isPublic ? (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] bg-emerald-500/20 text-emerald-300">
+                                Public
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] bg-amber-500/20 text-amber-300">
+                                Private
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">@{u.username}</div>
+                        </div>
+                      </div>
+
+                      {/* Admin Controls */}
+                      <div className="flex items-center gap-2 self-end sm:self-center">
+                        {resetPinUserId === u.id ? (
+                          <div className="flex items-center gap-1.5 animate-in fade-in">
+                            <input
+                              type="password"
+                              value={resetPinValue}
+                              onChange={(e) => setResetPinValue(e.target.value)}
+                              placeholder="New PIN..."
+                              className="w-24 px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white font-mono"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleResetPinSubmit(u.id)}
+                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => {
+                                setResetPinUserId(null);
+                                setResetPinValue('');
+                              }}
+                              className="px-1.5 py-1 text-slate-400 hover:text-white text-xs"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setResetPinUserId(u.id);
+                              setResetPinValue('');
+                            }}
+                            className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-700 transition-colors"
+                            title="Reset this user's password"
+                          >
+                            Reset PIN
+                          </button>
+                        )}
+
+                        {!isTargetAdmin && !isCurrent && (
+                          <button
+                            onClick={() => handleDeleteUser(u.id, u.displayName)}
+                            className="p-1.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-950/50 border border-rose-500/30 transition-colors"
+                            title="Delete this profile and clear files"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
