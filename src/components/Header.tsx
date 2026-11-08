@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { ViewMode, SortField, SortOrder } from '../types/bgg';
+import { ViewMode, SortField, SortOrder, UserProfile } from '../types/bgg';
 import {
   Search,
   LayoutGrid,
@@ -12,6 +12,9 @@ import {
   Dices,
   RotateCcw,
   BarChart3,
+  Users,
+  CalendarDays,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -30,6 +33,14 @@ interface HeaderProps {
   isCustomLoaded: boolean;
   onResetDefault: () => void;
   cachedCount: number;
+  currentUser: UserProfile;
+  onOpenAuthModal: () => void;
+  onOpenCommunityModal: (tab?: 'members' | 'messages') => void;
+  onOpenMeetingModal: () => void;
+  activeLibraryUser: UserProfile | null;
+  onReturnToMyLibrary: () => void;
+  upcomingMeetingsCount: number;
+  messagesCount: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -48,6 +59,14 @@ export const Header: React.FC<HeaderProps> = ({
   isCustomLoaded,
   onResetDefault,
   cachedCount,
+  currentUser,
+  onOpenAuthModal,
+  onOpenCommunityModal,
+  onOpenMeetingModal,
+  activeLibraryUser,
+  onReturnToMyLibrary,
+  upcomingMeetingsCount,
+  messagesCount,
 }) => {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -232,25 +251,75 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
-          {/* CSV File Upload Trigger */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            onChange={handleFileInput}
-            className="hidden"
-          />
+          {/* Game Night Meetups Button */}
           <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 transition-all shrink-0"
-            title="Upload custom collection.csv export"
+            onClick={onOpenMeetingModal}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 transition-all shrink-0 relative"
+            title="View scheduled game night meetups & confirm attendance"
           >
-            <Upload className="w-3.5 h-3.5 text-orange-400" />
-            <span className="hidden sm:inline">Import CSV</span>
+            <CalendarDays className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden md:inline">Game Nights</span>
+            {upcomingMeetingsCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-slate-950">
+                {upcomingMeetingsCount}
+              </span>
+            )}
           </button>
 
+          {/* Group Members & Chat Button */}
+          <button
+            onClick={() => onOpenCommunityModal()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 transition-all shrink-0 relative"
+            title="View group members directory & in-app chat"
+          >
+            <Users className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden md:inline">Group</span>
+            {messagesCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-500 text-white">
+                {messagesCount}
+              </span>
+            )}
+          </button>
+
+          {/* User Account / Profile Dropdown Trigger */}
+          <button
+            onClick={onOpenAuthModal}
+            className="flex items-center gap-2 pl-2 pr-3 py-1 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-700/80 transition-all shrink-0 group"
+            title={`Logged in as ${currentUser.displayName}. Click to switch user or edit profile.`}
+          >
+            <div
+              className={`w-6 h-6 rounded-lg ${currentUser.avatarColor} flex items-center justify-center font-bold text-[10px] shadow-sm`}
+            >
+              {currentUser.displayName.slice(0, 2).toUpperCase()}
+            </div>
+            <span className="text-xs font-semibold text-slate-200 group-hover:text-white max-w-[100px] truncate hidden sm:inline">
+              {currentUser.displayName}
+            </span>
+          </button>
+
+          {/* CSV File Upload Trigger (Only visible for library owner) */}
+          {(!activeLibraryUser || activeLibraryUser.id === currentUser.id) && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleFileInput}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 transition-all shrink-0"
+                title="Upload custom collection.csv export"
+              >
+                <Upload className="w-3.5 h-3.5 text-orange-400" />
+                <span className="hidden sm:inline">Import CSV</span>
+              </button>
+            </>
+          )}
+
           {/* Reset custom CSV if uploaded */}
-          {isCustomLoaded && (
+          {isCustomLoaded && (!activeLibraryUser || activeLibraryUser.id === currentUser.id) && (
             <button
               onClick={onResetDefault}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-amber-400 hover:text-amber-300 bg-amber-500/10 border border-amber-500/30 transition-all shrink-0"
@@ -258,6 +327,18 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <RotateCcw className="w-3 h-3" />
               <span className="hidden sm:inline">Reset Default</span>
+            </button>
+          )}
+
+          {/* If viewing another user's library, show Back to My Library button */}
+          {activeLibraryUser && activeLibraryUser.id !== currentUser.id && (
+            <button
+              onClick={onReturnToMyLibrary}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-orange-600 hover:bg-orange-500 shadow-md transition-all shrink-0"
+              title="Return to your personal library"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to My Library</span>
             </button>
           )}
         </div>

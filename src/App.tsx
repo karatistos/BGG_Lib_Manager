@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import defaultCsvContent from '../collection.csv?raw';
 import defaultCoversData from './data/bggCovers.json';
-import { GameRecord, FilterState, ViewMode, SortField, SortOrder } from './types/bgg';
+import { GameRecord, FilterState, ViewMode, SortField, SortOrder, UserProfile } from './types/bgg';
 import { parseBggCsv } from './services/csvParser';
 import {
   getCustomCsv,
@@ -9,6 +9,13 @@ import {
   clearCustomCsv,
   getCachedMetadataMap,
 } from './services/storage';
+import {
+  getCurrentUser,
+  getUserCsv,
+  saveUserCsv,
+  getAllMeetings,
+  getAllMessages,
+} from './services/communityStorage';
 import { CURATED_MECHANICS_SEED } from './services/bggApi';
 import { filterAndSortGames, computeCollectionMetrics } from './services/searchFilter';
 import { Header } from './components/Header';
@@ -20,11 +27,14 @@ import { DetailModal } from './components/DetailModal';
 import { BggSyncModal } from './components/BggSyncModal';
 import { RandomGameModal } from './components/RandomGameModal';
 import { AnalyticsModal } from './components/AnalyticsModal';
-import { SlidersHorizontal } from 'lucide-react';
+import { AuthModal } from './components/AuthModal';
+import { CommunityModal } from './components/CommunityModal';
+import { MeetingModal } from './components/MeetingModal';
+import { SlidersHorizontal, Lock, ArrowLeft } from 'lucide-react';
 
 const INITIAL_FILTERS: FilterState = {
   searchQuery: '',
-  itemType: 'standalone', // Clarification #3: Default to standalone, with toggle for expansions / all
+  itemType: 'standalone', // Default to standalone, with toggle for expansions / all
   playerCount: null,
   onlyBestPlayers: false,
   weightBrackets: [],
@@ -39,11 +49,58 @@ const INITIAL_FILTERS: FilterState = {
 };
 
 export const App: React.FC = () => {
+  // Current user & active library session
+  const [currentUser, setCurrentUser] = useState<UserProfile>(() => getCurrentUser());
+  const [activeLibraryUser, setActiveLibraryUser] = useState<UserProfile | null>(null);
+
+  // Community & Meeting & Auth Modals
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isCommunityModalOpen, setIsCommunityModalOpen] = useState(false);
+  const [communityTab, setCommunityTab] = useState<'members' | 'messages'>('members');
+  const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
+
   const [csvRaw, setCsvRaw] = useState<string>(() => {
-    return getCustomCsv() || defaultCsvContent;
+    return getUserCsv(currentUser.id) || getCustomCsv() || defaultCsvContent;
   });
-  const [isCustomLoaded, setIsCustomLoaded] = useState<boolean>(() => !!getCustomCsv());
+  const [isCustomLoaded, setIsCustomLoaded] = useState<boolean>(() => {
+    return !!(getUserCsv(currentUser.id) || getCustomCsv());
+  });
   const [metadataVersion, setMetadataVersion] = useState<number>(0);
+
+  // Update loaded CSV when switching user or switching library
+  const handleUserChange = (user: UserProfile) => {
+    setCurrentUser(user);
+    setActiveLibraryUser(null);
+    const userSaved = getUserCsv(user.id);
+    if (userSaved) {
+      setCsvRaw(userSaved);
+      setIsCustomLoaded(true);
+    } else {
+      setCsvRaw(defaultCsvContent);
+      setIsCustomLoaded(false);
+    }
+  };
+
+  const handleBrowseUserLibrary = (user: UserProfile) => {
+    if (user.id === currentUser.id) {
+      setActiveLibraryUser(null);
+      const userSaved = getUserCsv(user.id);
+      setCsvRaw(userSaved || defaultCsvContent);
+      setIsCustomLoaded(!!userSaved);
+    } else {
+      setActiveLibraryUser(user);
+      const targetCsv = getUserCsv(user.id) || defaultCsvContent;
+      setCsvRaw(targetCsv);
+      setIsCustomLoaded(false);
+    }
+  };
+
+  const handleReturnToMyLibrary = () => {
+    setActiveLibraryUser(null);
+    const myCsv = getUserCsv(currentUser.id) || getCustomCsv() || defaultCsvContent;
+    setCsvRaw(myCsv);
+    setIsCustomLoaded(!!(getUserCsv(currentUser.id) || getCustomCsv()));
+  };
 
   // Parse and enrich base games
   const rawGames = useMemo<GameRecord[]>(() => {
@@ -141,12 +198,17 @@ export const App: React.FC = () => {
   };
 
   const handleFileUpload = (file: File) => {
+    if (activeLibraryUser && activeLibraryUser.id !== currentUser.id) {
+      alert(`You are currently browsing ${activeLibraryUser.displayName}'s library in Read-Only mode. Switch back to your library to upload custom files.`);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (e) => {
       const content = e.target?.result as string;
       if (content) {
         const records = parseBggCsv(content);
         if (records.length > 0) {
+          saveUserCsv(currentUser.id, content);
           saveCustomCsv(content);
           setCsvRaw(content);
           setIsCustomLoaded(true);
@@ -159,6 +221,7 @@ export const App: React.FC = () => {
   };
 
   const handleResetDefault = () => {
+    saveUserCsv(currentUser.id, '');
     clearCustomCsv();
     setCsvRaw(defaultCsvContent);
     setIsCustomLoaded(false);
@@ -184,10 +247,11 @@ export const App: React.FC = () => {
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('drop', handleDrop);
     };
-  }, []);
+  }, [activeLibraryUser, currentUser]);
 
   const cachedMetadataMap = getCachedMetadataMap();
   const cachedCount = Object.keys(cachedMetadataMap).length;
+  const isReadOnlyLibrary = activeLibraryUser !== null && activeLibraryUser.id !== currentUser.id;
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col font-sans">
@@ -208,7 +272,40 @@ export const App: React.FC = () => {
         isCustomLoaded={isCustomLoaded}
         onResetDefault={handleResetDefault}
         cachedCount={cachedCount}
+        currentUser={currentUser}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onOpenCommunityModal={(tab = 'members') => {
+          setCommunityTab(tab);
+          setIsCommunityModalOpen(true);
+        }}
+        onOpenMeetingModal={() => setIsMeetingModalOpen(true)}
+        activeLibraryUser={activeLibraryUser}
+        onReturnToMyLibrary={handleReturnToMyLibrary}
+        upcomingMeetingsCount={getAllMeetings().length}
+        messagesCount={getAllMessages().length}
       />
+
+      {/* Read-Only Banner when browsing another member's library */}
+      {isReadOnlyLibrary && activeLibraryUser && (
+        <div className="bg-amber-950/70 border-b border-amber-500/30 px-4 py-2.5 backdrop-blur-md animate-in slide-in-from-top-1 duration-200">
+          <div className="max-w-[1700px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-amber-200">
+              <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                Viewing <strong>{activeLibraryUser.displayName}'s Collection</strong> ({rawGames.length} games) •{' '}
+                <span className="text-amber-300 font-semibold">🔒 Read-Only</span> — You can browse, filter, and view rulebooks/notes, but cannot edit this library.
+              </span>
+            </div>
+            <button
+              onClick={handleReturnToMyLibrary}
+              className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold flex items-center gap-1.5 transition-all shadow-sm shrink-0"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Return to My Library</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 2. Main Content Container */}
       <main className="max-w-[1700px] w-full mx-auto px-4 py-5 flex-1 space-y-5">
@@ -279,6 +376,8 @@ export const App: React.FC = () => {
         onSelectMechanic={handleSelectMechanic}
         allGames={rawGames}
         onSelectGame={(g) => setSelectedGame(g)}
+        isReadOnly={isReadOnlyLibrary}
+        ownerName={activeLibraryUser?.displayName || currentUser.displayName}
       />
 
       {/* 4. Game Night Picker (Dice roll with in-modal group filters) */}
@@ -308,6 +407,32 @@ export const App: React.FC = () => {
         isOpen={isSyncModalOpen}
         onClose={() => setIsSyncModalOpen(false)}
         onSyncComplete={handleSyncComplete}
+      />
+
+      {/* 7. User Authentication & Profile Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={currentUser}
+        onUserChange={handleUserChange}
+      />
+
+      {/* 8. Game Group Community Directory & Messages Hub */}
+      <CommunityModal
+        isOpen={isCommunityModalOpen}
+        onClose={() => setIsCommunityModalOpen(false)}
+        currentUser={currentUser}
+        allGames={rawGames}
+        onBrowseUserLibrary={handleBrowseUserLibrary}
+        initialTab={communityTab}
+      />
+
+      {/* 9. Game Night Meetup Scheduler & RSVPs Modal */}
+      <MeetingModal
+        isOpen={isMeetingModalOpen}
+        onClose={() => setIsMeetingModalOpen(false)}
+        currentUser={currentUser}
+        allGames={rawGames}
       />
     </div>
   );

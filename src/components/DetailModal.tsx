@@ -38,6 +38,8 @@ interface DetailModalProps {
   onSelectMechanic: (mechanic: string) => void;
   allGames: GameRecord[];
   onSelectGame: (game: GameRecord) => void;
+  isReadOnly?: boolean;
+  ownerName?: string;
 }
 
 type TabType = 'overview' | 'expansions' | 'guides' | 'annotations';
@@ -48,6 +50,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({
   onSelectMechanic,
   allGames,
   onSelectGame,
+  isReadOnly = false,
+  ownerName = 'Owner',
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
@@ -149,6 +153,11 @@ export const DetailModal: React.FC<DetailModalProps> = ({
           <div className="flex items-center gap-3 min-w-0 pr-4">
             <RankBadge rank={game.rank} />
             <TypeBadge type={game.type} />
+            {isReadOnly && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
+                🔒 Read-Only • {ownerName}
+              </span>
+            )}
             <h2 className="text-lg md:text-xl font-bold text-white truncate" title={game.name}>
               {game.name}
             </h2>
@@ -556,25 +565,35 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                         <Sparkles className="w-3.5 h-3.5 text-sky-400" />
                       </h4>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        Attach PDFs, cheat sheets, or player aid images for quick offline access during game night.
+                        {isReadOnly
+                          ? `Viewing reference files attached by ${ownerName}.`
+                          : 'Attach PDFs, cheat sheets, or player aid images for quick offline access during game night.'}
                       </p>
                     </div>
 
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".pdf,.png,.jpg,.jpeg,.txt,.md"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploading}
-                      className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white transition-all shadow-md shadow-sky-600/20 disabled:opacity-50"
-                    >
-                      <FileUp className="w-4 h-4" />
-                      <span>{isUploading ? 'Saving...' : 'Attach File'}</span>
-                    </button>
+                    {!isReadOnly ? (
+                      <>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".pdf,.png,.jpg,.jpeg,.txt,.md"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isUploading}
+                          className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white transition-all shadow-md shadow-sky-600/20 disabled:opacity-50"
+                        >
+                          <FileUp className="w-4 h-4" />
+                          <span>{isUploading ? 'Saving...' : 'Attach File'}</span>
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-slate-400 font-mono bg-slate-800/60 px-2.5 py-1 rounded-lg border border-slate-700/50">
+                        🔒 Read-Only Files
+                      </span>
+                    )}
                   </div>
 
                   {/* List of Attached Files */}
@@ -614,28 +633,34 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                             >
                               <Download className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => handleDeleteFile(f.id)}
-                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 transition-colors"
-                              title="Remove attachment"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {!isReadOnly && (
+                              <button
+                                onClick={() => handleDeleteFile(f.id)}
+                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 transition-colors"
+                                title="Remove attachment"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : (
                     <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className="p-10 text-center bg-slate-950/40 rounded-2xl border-2 border-dashed border-slate-800 hover:border-sky-500/40 cursor-pointer transition-colors space-y-2"
+                      onClick={() => !isReadOnly && fileInputRef.current?.click()}
+                      className={`p-10 text-center bg-slate-950/40 rounded-2xl border-2 border-dashed border-slate-800 ${
+                        !isReadOnly ? 'hover:border-sky-500/40 cursor-pointer' : ''
+                      } transition-colors space-y-2`}
                     >
                       <FileUp className="w-8 h-8 text-slate-500 mx-auto" />
                       <div className="text-xs font-semibold text-slate-300">
                         No reference guides attached yet
                       </div>
                       <div className="text-[11px] text-slate-500">
-                        Click here to attach a rulebook PDF, setup cheat sheet, or player aid image.
+                        {isReadOnly
+                          ? `No reference guides have been attached to this game by ${ownerName}.`
+                          : 'Click here to attach a rulebook PDF, setup cheat sheet, or player aid image.'}
                       </div>
                     </div>
                   )}
@@ -649,46 +674,62 @@ export const DetailModal: React.FC<DetailModalProps> = ({
                     <div>
                       <h4 className="text-sm font-bold text-white flex items-center gap-2">
                         <span>Personal Notes & Annotations</span>
-                        {saveStatus && (
+                        {!isReadOnly && saveStatus && (
                           <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-normal">
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             {saveStatus}
                           </span>
                         )}
+                        {isReadOnly && (
+                          <span className="text-[11px] text-slate-400 font-mono bg-slate-800/60 px-2 py-0.5 rounded border border-slate-700/50">
+                            🔒 Read-Only
+                          </span>
+                        )}
                       </h4>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        Private notes auto-save in your browser.
+                        {isReadOnly
+                          ? `Viewing notes written by ${ownerName}. These cannot be modified.`
+                          : 'Private notes auto-save in your browser.'}
                       </p>
                     </div>
 
                     {/* Quick Template Buttons */}
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => insertTemplate('Setup Tip')}
-                        className="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                      >
-                        + Setup
-                      </button>
-                      <button
-                        onClick={() => insertTemplate('House Rule')}
-                        className="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                      >
-                        + House Rule
-                      </button>
-                      <button
-                        onClick={() => insertTemplate('Card Sleeves')}
-                        className="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                      >
-                        + Sleeves
-                      </button>
-                    </div>
+                    {!isReadOnly && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => insertTemplate('Setup Tip')}
+                          className="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                        >
+                          + Setup
+                        </button>
+                        <button
+                          onClick={() => insertTemplate('House Rule')}
+                          className="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                        >
+                          + House Rule
+                        </button>
+                        <button
+                          onClick={() => insertTemplate('Card Sleeves')}
+                          className="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                        >
+                          + Sleeves
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <textarea
                     value={annotation}
-                    onChange={(e) => handleAnnotationChange(e.target.value)}
-                    placeholder="Type your personal setup notes, house rules, card sleeving info, or playgroup records here..."
-                    className="w-full h-64 p-4 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 font-sans leading-relaxed resize-none"
+                    onChange={(e) => !isReadOnly && handleAnnotationChange(e.target.value)}
+                    readOnly={isReadOnly}
+                    placeholder={
+                      isReadOnly
+                        ? `No personal notes left for this title by ${ownerName}.`
+                        : 'Type your personal setup notes, house rules, card sleeving info, or playgroup records here...'
+                    }
+                    className={`w-full h-64 p-4 rounded-xl bg-slate-950 border border-slate-800 text-sm ${
+                      isReadOnly ? 'text-slate-300 cursor-default' : 'text-slate-100 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20'
+                    } placeholder-slate-600 focus:outline-none font-sans leading-relaxed resize-none`}
                   />
                 </div>
               )}

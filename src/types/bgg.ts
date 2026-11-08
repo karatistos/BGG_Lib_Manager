@@ -79,3 +79,57 @@ export interface CollectionMetrics {
   playerCountCoverage: Record<number, number>;
 }
 
+// User Authentication & Profile
+export interface UserProfile {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarColor: string; // e.g. 'orange', 'emerald', 'sky', 'purple', 'rose'
+  bggUsername?: string;
+  bio?: string;
+  isPublic: boolean;   // if true, other group members can browse their library in read-only mode
+  createdAt: number;
+}
+
+// In-app messaging
+export interface ChatMessage {
+  id: string;
+  fromUserId: string;
+  fromUserName: string;
+  fromUserColor: string;
+  toUserId?: string;   // undefined or 'all' = Group Chat, or specific userId
+  content: string;
+  linkedGameId?: number;
+  linkedGameName?: string;
+  createdAt: number;
+}
+
+// Game Night Meetup & RSVP
+export type MeetingRsvpStatus = 'confirmed' | 'maybe' | 'declined';
+
+export interface MeetingParticipant {
+  userId: string;
+  userName: string;
+  avatarColor: string;
+  status: MeetingRsvpStatus;
+  updatedAt: number;
+}
+
+export interface GameMeeting {
+  id: string;
+  hostUserId: string;
+  hostUserName: string;
+  hostAvatarColor: string;
+  title: string;
+  gameId?: number;
+  gameName: string;
+  gameThumbnail?: string;
+  date: string;       // YYYY-MM-DD
+  time: string;       // HH:MM (e.g. "19:00")
+  location: string;   // e.g. "Carlos' House", "The Dice Cafe"
+  maxPlayers: number;
+  description?: string;
+  participants: MeetingParticipant[];
+  createdAt: number;
+}
+
