@@ -20,6 +20,22 @@ export const AVATAR_COLORS = [
   'bg-teal-500 text-white',
 ];
 
+export async function hashPassword(password: string): Promise<string> {
+  const enc = new TextEncoder();
+  const data = enc.encode(`bgg_salt_${password}`);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function verifyPassword(password: string, hash?: string): Promise<boolean> {
+  if (!hash) return true; // unauthenticated account
+  const computed = await hashPassword(password);
+  return computed === hash;
+}
+
+const DEFAULT_DEMO_PIN_HASH = 'bf98cd6702b1433317bb4e0c053f168632f0b0d1f541a008b70ca0d6cb48e796'; // hash of '1234'
+
 const INITIAL_USERS: UserProfile[] = [
   {
     id: 'user_host',
@@ -29,6 +45,7 @@ const INITIAL_USERS: UserProfile[] = [
     bggUsername: 'carlos_bgg',
     bio: 'Club organizer. Love medium-heavy Euros and cooperative campaigns.',
     isPublic: true,
+    passwordHash: DEFAULT_DEMO_PIN_HASH,
     createdAt: Date.now() - 86400000 * 30,
   },
   {
@@ -39,6 +56,7 @@ const INITIAL_USERS: UserProfile[] = [
     bggUsername: 'elena_games',
     bio: 'Big fan of engine builders, worker placement, and Wingspan!',
     isPublic: true,
+    passwordHash: DEFAULT_DEMO_PIN_HASH,
     createdAt: Date.now() - 86400000 * 15,
   },
   {
@@ -49,6 +67,7 @@ const INITIAL_USERS: UserProfile[] = [
     bggUsername: 'mateo_dice',
     bio: 'Always up for Brass Birmingham, Scythe, or high-stakes deck builders.',
     isPublic: true,
+    passwordHash: DEFAULT_DEMO_PIN_HASH,
     createdAt: Date.now() - 86400000 * 5,
   },
 ];
@@ -179,7 +198,12 @@ export function saveUser(user: UserProfile): void {
   }
 }
 
-export function createUser(username: string, displayName: string, bggUsername?: string): UserProfile {
+export function createUser(
+  username: string,
+  displayName: string,
+  bggUsername?: string,
+  passwordHash?: string
+): UserProfile {
   const users = getAllUsers();
   const color = AVATAR_COLORS[users.length % AVATAR_COLORS.length];
   const newUser: UserProfile = {
@@ -189,6 +213,7 @@ export function createUser(username: string, displayName: string, bggUsername?: 
     avatarColor: color,
     bggUsername: bggUsername?.trim() || undefined,
     isPublic: true,
+    passwordHash,
     createdAt: Date.now(),
   };
 
@@ -373,3 +398,4 @@ export function saveUserAnnotation(userId: string, gameId: number, note: string)
     console.error('Failed to save user annotation', err);
   }
 }
+

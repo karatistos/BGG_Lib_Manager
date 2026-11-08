@@ -88,6 +88,7 @@ export interface UserProfile {
   bggUsername?: string;
   bio?: string;
   isPublic: boolean;   // if true, other group members can browse their library in read-only mode
+  passwordHash?: string; // SHA-256 hashed password/PIN to protect account & profile editing
   createdAt: number;
 }
 
