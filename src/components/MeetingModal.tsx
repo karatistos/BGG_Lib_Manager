@@ -55,6 +55,10 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
 
   const handleCreateMeeting = (e: React.FormEvent) => {
     e.preventDefault();
+    if (currentUser.id === 'guest') {
+      alert('Please log in with your club profile to schedule a game night meetup.');
+      return;
+    }
     if (!title.trim() || !selectedGameName.trim()) return;
 
     const matchedGame = allGames.find((g) => g.name.toLowerCase() === selectedGameName.toLowerCase());
@@ -79,6 +83,10 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
   };
 
   const handleRsvp = (meetingId: string, status: MeetingRsvpStatus) => {
+    if (currentUser.id === 'guest') {
+      alert('Please log in with your club profile to RSVP for game nights.');
+      return;
+    }
     rsvpGameMeeting(meetingId, currentUser, status);
     setMeetings(getAllMeetings());
   };

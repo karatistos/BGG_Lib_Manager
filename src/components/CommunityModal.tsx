@@ -41,6 +41,10 @@ export const CommunityModal: React.FC<CommunityModalProps> = ({
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
+    if (currentUser.id === 'guest') {
+      alert('Please log in with your club profile to participate in chat.');
+      return;
+    }
     if (!messageText.trim()) return;
 
     const gameRecord = selectedGameTag ? allGames.find((g) => g.name === selectedGameTag) : undefined;

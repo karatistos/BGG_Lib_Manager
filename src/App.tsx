@@ -24,6 +24,7 @@ import {
   getAllMeetings,
   getAllMessages,
   getAllUsers,
+  logoutUser,
 } from './services/communityStorage';
 import { CURATED_MECHANICS_SEED } from './services/bggApi';
 import { filterAndSortGames, computeCollectionMetrics } from './services/searchFilter';
@@ -93,10 +94,12 @@ function enrichGameRecord(
 }
 
 export const App: React.FC = () => {
-  // Current user & active library session
+  // Current user & active library session (defaults safely to Guest Visitor)
   const [currentUser, setCurrentUser] = useState<UserProfile>(() => getCurrentUser());
   const [activeLibraryUser, setActiveLibraryUser] = useState<UserProfile | null>(null);
-  const [libraryScope, setLibraryScope] = useState<LibraryScope>('user');
+  const [libraryScope, setLibraryScope] = useState<LibraryScope>(() =>
+    getCurrentUser().id === 'guest' ? 'group' : 'user'
+  );
 
   // Mobile Drawer state
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
@@ -115,10 +118,24 @@ export const App: React.FC = () => {
   });
   const [metadataVersion, setMetadataVersion] = useState<number>(0);
 
+  // Logout handler
+  const handleLogout = () => {
+    const guest = logoutUser();
+    setCurrentUser(guest);
+    setActiveLibraryUser(null);
+    setLibraryScope('group');
+  };
+
   // Update loaded CSV when switching user or switching library
   const handleUserChange = (user: UserProfile) => {
     setCurrentUser(user);
     setActiveLibraryUser(null);
+    if (user.id === 'guest') {
+      setLibraryScope('group');
+      setCsvRaw(defaultCsvContent);
+      setIsCustomLoaded(false);
+      return;
+    }
     setLibraryScope('user');
     const userSaved = getUserCsv(user.id);
     if (userSaved) {
@@ -274,6 +291,11 @@ export const App: React.FC = () => {
   };
 
   const handleFileUpload = (file: File) => {
+    if (currentUser.id === 'guest') {
+      alert('Please log in with your club profile to upload a personal collection.');
+      setIsAuthModalOpen(true);
+      return;
+    }
     if (activeLibraryUser && activeLibraryUser.id !== currentUser.id) {
       alert(
         `You are currently browsing ${activeLibraryUser.displayName}'s library in Read-Only mode. Switch back to your library to upload custom files.`
@@ -384,6 +406,7 @@ export const App: React.FC = () => {
         }}
         groupGamesCount={groupGames.length}
         onOpenMobileDrawer={() => setIsMobileDrawerOpen(true)}
+        onLogout={handleLogout}
       />
 
       {/* Club Super Library Banner */}
@@ -551,6 +574,7 @@ export const App: React.FC = () => {
         onResetDefault={handleResetDefault}
         onReturnToMyLibrary={handleReturnToMyLibrary}
         groupGamesCount={groupGames.length}
+        onLogout={handleLogout}
       />
 
       {/* 4. Centered Large Game Detail Modal */}

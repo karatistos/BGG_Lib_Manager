@@ -189,9 +189,44 @@ export function getAllUsers(): UserProfile[] {
   }
 }
 
+export const GUEST_USER: UserProfile = {
+  id: 'guest',
+  username: 'guest',
+  displayName: 'Guest Explorer',
+  avatarColor: 'bg-slate-700 text-slate-300',
+  bio: 'Visiting the Piedecuesta Board Game Club collection in Read-Only mode.',
+  isPublic: false,
+  role: 'user',
+  createdAt: 0,
+};
+
 export function isSuperAdmin(user?: UserProfile | null): boolean {
-  if (!user) return false;
-  return user.role === 'admin' || user.id === 'user_admin' || user.username === 'admin';
+  if (!user || user.id === 'guest') return false;
+  const isMatch = user.role === 'admin' || user.id === 'user_admin' || user.username === 'admin';
+  if (!isMatch) return false;
+  try {
+    return sessionStorage.getItem('bgg_admin_session_auth') === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setAdminSessionAuth(isValid: boolean): void {
+  try {
+    if (isValid) {
+      sessionStorage.setItem('bgg_admin_session_auth', 'true');
+    } else {
+      sessionStorage.removeItem('bgg_admin_session_auth');
+    }
+  } catch {}
+}
+
+export function logoutUser(): UserProfile {
+  try {
+    sessionStorage.removeItem('bgg_admin_session_auth');
+    localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, 'guest');
+  } catch {}
+  return GUEST_USER;
 }
 
 export function getClubEntryKey(): string {
@@ -237,22 +272,31 @@ export async function resetUserPasswordByAdmin(userId: string, newPin: string): 
 }
 
 export function getCurrentUser(): UserProfile {
-  const users = getAllUsers();
   try {
     const id = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID);
-    if (id) {
+    if (id && id !== 'guest') {
+      const users = getAllUsers();
       const found = users.find((u) => u.id === id);
-      if (found) return found;
+      if (found) {
+        // If the user is admin, enforce active session authentication
+        if (found.id === 'user_admin' || found.role === 'admin') {
+          try {
+            if (sessionStorage.getItem('bgg_admin_session_auth') === 'true') {
+              return found;
+            }
+          } catch {}
+          // Session expired or tab reopened: revert to safe guest
+          return GUEST_USER;
+        }
+        return found;
+      }
     }
   } catch {
     // fallback
   }
-  // Default to first user (Host)
-  const defaultUser = users[0] || INITIAL_USERS[0];
-  try {
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, defaultUser.id);
-  } catch {}
-  return defaultUser;
+
+  // Safe default: ALWAYS land as Guest Explorer (Read-Only)
+  return GUEST_USER;
 }
 
 export function setCurrentUserId(userId: string): void {

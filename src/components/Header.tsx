@@ -18,6 +18,8 @@ import {
   Globe,
   User,
   Menu,
+  LogIn,
+  LogOut,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -48,6 +50,7 @@ interface HeaderProps {
   onLibraryScopeChange: (scope: LibraryScope) => void;
   groupGamesCount: number;
   onOpenMobileDrawer: () => void;
+  onLogout: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -78,9 +81,11 @@ export const Header: React.FC<HeaderProps> = ({
   onLibraryScopeChange,
   groupGamesCount,
   onOpenMobileDrawer,
+  onLogout,
 }) => {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isGuest = currentUser.id === 'guest';
 
   // Cmd+K / Ctrl+K keyboard shortcut
   useEffect(() => {
@@ -120,12 +125,12 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </h1>
               <p className="text-[10px] text-slate-400 mt-0.5 hidden sm:block">
-                Instant search & club collections
+                Piedecuesta Board Game Collection
               </p>
             </div>
           </div>
 
-          {/* Smartphone-Only Controls: Fast Scope + Menu Drawer Button */}
+          {/* Smartphone-Only Controls: Fast Scope + LogIn/Menu */}
           <div className="flex md:hidden items-center gap-1.5">
             {/* Quick Scope Switcher */}
             <div className="flex items-center p-0.5 bg-slate-900 border border-slate-800 rounded-lg text-xs font-semibold">
@@ -156,14 +161,23 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
 
-            {/* Mobile View Toggle */}
-            <button
-              onClick={() => onViewModeChange(viewMode === 'grid' ? 'table' : 'grid')}
-              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300"
-              title={viewMode === 'grid' ? 'Switch to Table' : 'Switch to Grid'}
-            >
-              {viewMode === 'grid' ? <TableIcon className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
-            </button>
+            {/* If guest, show mobile Log In button */}
+            {isGuest ? (
+              <button
+                onClick={onOpenAuthModal}
+                className="px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-all shadow-sm"
+              >
+                Log In
+              </button>
+            ) : (
+              <button
+                onClick={onLogout}
+                className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-rose-400 text-xs"
+                title="Log Out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
 
             {/* Lateral Deployable Panel Trigger Button with Notification Dot */}
             <button
@@ -311,7 +325,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Collection Analytics / Shelf Insights */}
           <button
             onClick={onOpenAnalyticsModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 transition-all shrink-0"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-850 text-slate-200 border border-slate-700 transition-all shrink-0"
             title="Open collection visual charts & shelf insights"
           >
             <BarChart3 className="w-3.5 h-3.5 text-purple-400" />
@@ -364,23 +378,44 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {/* User Account / Profile Dropdown Trigger */}
-          <button
-            onClick={onOpenAuthModal}
-            className="flex items-center gap-2 pl-2 pr-3 py-1 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-700/80 transition-all shrink-0 group"
-            title={`Logged in as ${currentUser.displayName}. Click to switch user or edit profile.`}
-          >
-            <div
-              className={`w-6 h-6 rounded-lg ${currentUser.avatarColor} flex items-center justify-center font-bold text-[10px] shadow-sm`}
+          {isGuest ? (
+            <button
+              onClick={onOpenAuthModal}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold text-xs shadow-md shadow-orange-500/25 transition-all shrink-0"
+              title="Log in to manage your collection or register"
             >
-              {currentUser.displayName.slice(0, 2).toUpperCase()}
-            </div>
-            <span className="text-xs font-semibold text-slate-200 group-hover:text-white max-w-[100px] truncate hidden sm:inline">
-              {currentUser.displayName}
-            </span>
-          </button>
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Log In</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={onOpenAuthModal}
+                className="flex items-center gap-2 pl-2 pr-3 py-1 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-700/80 transition-all shrink-0 group"
+                title={`Logged in as ${currentUser.displayName}. Click to manage profile.`}
+              >
+                <div
+                  className={`w-6 h-6 rounded-lg ${currentUser.avatarColor} flex items-center justify-center font-bold text-[10px] shadow-sm`}
+                >
+                  {currentUser.displayName.slice(0, 2).toUpperCase()}
+                </div>
+                <span className="text-xs font-semibold text-slate-200 group-hover:text-white max-w-[100px] truncate hidden sm:inline">
+                  {currentUser.displayName}
+                </span>
+              </button>
 
-          {/* CSV File Upload Trigger */}
-          {(!activeLibraryUser || activeLibraryUser.id === currentUser.id) && (
+              <button
+                onClick={onLogout}
+                className="p-1.5 rounded-xl bg-slate-900 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-slate-800 hover:border-rose-500/30 transition-all shrink-0"
+                title="Log Out of this profile"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* CSV File Upload Trigger (only when logged in) */}
+          {!isGuest && (!activeLibraryUser || activeLibraryUser.id === currentUser.id) && (
             <>
               <input
                 ref={fileInputRef}
@@ -401,7 +436,7 @@ export const Header: React.FC<HeaderProps> = ({
           )}
 
           {/* Reset custom CSV if uploaded */}
-          {isCustomLoaded && (!activeLibraryUser || activeLibraryUser.id === currentUser.id) && (
+          {!isGuest && isCustomLoaded && (!activeLibraryUser || activeLibraryUser.id === currentUser.id) && (
             <button
               onClick={onResetDefault}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-amber-400 hover:text-amber-300 bg-amber-500/10 border border-amber-500/30 transition-all shrink-0"

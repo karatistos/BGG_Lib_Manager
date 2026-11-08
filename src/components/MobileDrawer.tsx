@@ -32,6 +32,8 @@ import {
   ArrowDown,
   Crown,
   ChevronRight,
+  LogIn,
+  LogOut,
 } from 'lucide-react';
 
 interface MobileDrawerProps {
@@ -63,6 +65,7 @@ interface MobileDrawerProps {
   onResetDefault: () => void;
   onReturnToMyLibrary: () => void;
   groupGamesCount: number;
+  onLogout: () => void;
 }
 
 export const MobileDrawer: React.FC<MobileDrawerProps> = ({
@@ -94,8 +97,10 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
   onResetDefault,
   onReturnToMyLibrary,
   groupGamesCount,
+  onLogout,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isGuest = currentUser.id === 'guest';
   const isAdmin = isSuperAdmin(currentUser);
 
   if (!isOpen) return null;
@@ -153,42 +158,66 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
           {/* Drawer Scrollable Body */}
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
             {/* 1. User Profile Snippet */}
-            <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
+            {isGuest ? (
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-950 to-orange-950/30 border border-orange-500/30 space-y-3">
                 <div className="flex items-center gap-3">
-                  <div
-                    className={`w-10 h-10 rounded-xl ${currentUser.avatarColor} flex items-center justify-center font-extrabold text-sm shadow-md shrink-0`}
-                  >
-                    {currentUser.displayName.slice(0, 2).toUpperCase()}
+                  <div className="w-10 h-10 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center font-extrabold text-sm shadow-md shrink-0">
+                    <User className="w-5 h-5 text-orange-400" />
                   </div>
-                  <div className="min-w-0">
-                    <div className="font-bold text-white text-sm flex items-center gap-1.5 truncate">
-                      <span>{currentUser.displayName}</span>
-                      {isAdmin && (
-                        <span className="px-1.5 py-0.2 rounded text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-0.5 shrink-0">
-                          <Crown className="w-2.5 h-2.5" /> Admin
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[11px] text-slate-400 font-mono">@{currentUser.username}</div>
+                  <div>
+                    <div className="font-bold text-white text-sm">Guest Explorer</div>
+                    <div className="text-[11px] text-slate-400">Read-Only club collection access</div>
                   </div>
                 </div>
                 <button
                   onClick={() => handleAction(onOpenAuthModal)}
-                  className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white border border-slate-700/80 text-xs font-semibold transition-all shrink-0"
+                  className="w-full py-2 px-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-orange-500/25 transition-all"
                 >
-                  Switch / PIN
+                  <LogIn className="w-4 h-4" />
+                  <span>Log In / Create Club Account</span>
                 </button>
               </div>
+            ) : (
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-10 h-10 rounded-xl ${currentUser.avatarColor} flex items-center justify-center font-extrabold text-sm shadow-md shrink-0`}
+                    >
+                      {currentUser.displayName.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold text-white text-sm flex items-center gap-1.5 truncate">
+                        <span>{currentUser.displayName}</span>
+                        {isAdmin && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-0.5 shrink-0">
+                            <Crown className="w-2.5 h-2.5" /> Admin
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono">@{currentUser.username}</div>
+                    </div>
+                  </div>
+                </div>
 
-              {/* Status Indicator */}
-              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-900 text-slate-400">
-                <span>Collection visibility:</span>
-                <span className={currentUser.isPublic ? 'text-emerald-400 font-medium' : 'text-amber-400 font-medium'}>
-                  {currentUser.isPublic ? '🌐 Shared with Club' : '🔒 Private'}
-                </span>
+                {/* Profile actions row */}
+                <div className="flex items-center gap-2 pt-1 border-t border-slate-900">
+                  <button
+                    onClick={() => handleAction(onOpenAuthModal)}
+                    className="flex-1 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white border border-slate-800 text-xs font-semibold transition-all text-center"
+                  >
+                    Manage Profile
+                  </button>
+                  <button
+                    onClick={() => handleAction(onLogout)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 border border-rose-500/30 text-xs font-semibold transition-all"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Log Out</span>
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* 2. Library Scope Switcher */}
             <div className="space-y-1.5">
@@ -501,43 +530,51 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
               </label>
 
               <div className="space-y-2">
-                {(!activeLibraryUser || activeLibraryUser.id === currentUser.id) && (
+                {isGuest ? (
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400">
+                    🔒 Log in with your club profile to upload and manage personal collection CSVs.
+                  </div>
+                ) : (
                   <>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".csv,text/csv"
-                      onChange={handleFileInput}
-                      className="hidden"
-                    />
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-slate-950 hover:bg-slate-850 border border-slate-800 text-xs font-semibold text-slate-200"
-                    >
-                      <Upload className="w-3.5 h-3.5 text-orange-400" />
-                      <span>Import Custom CSV Collection</span>
-                    </button>
+                    {(!activeLibraryUser || activeLibraryUser.id === currentUser.id) && (
+                      <>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".csv,text/csv"
+                          onChange={handleFileInput}
+                          className="hidden"
+                        />
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-slate-950 hover:bg-slate-850 border border-slate-800 text-xs font-semibold text-slate-200"
+                        >
+                          <Upload className="w-3.5 h-3.5 text-orange-400" />
+                          <span>Import Custom CSV Collection</span>
+                        </button>
+                      </>
+                    )}
+
+                    {isCustomLoaded && (!activeLibraryUser || activeLibraryUser.id === currentUser.id) && (
+                      <button
+                        onClick={() => handleAction(onResetDefault)}
+                        className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-xs font-semibold text-amber-300"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Reset to Bundled Collection.csv</span>
+                      </button>
+                    )}
+
+                    {activeLibraryUser && activeLibraryUser.id !== currentUser.id && (
+                      <button
+                        onClick={() => handleAction(onReturnToMyLibrary)}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-bold text-white shadow-md"
+                      >
+                        <ArrowLeft className="w-4 h-4" />
+                        <span>Return to My Personal Library</span>
+                      </button>
+                    )}
                   </>
-                )}
-
-                {isCustomLoaded && (!activeLibraryUser || activeLibraryUser.id === currentUser.id) && (
-                  <button
-                    onClick={() => handleAction(onResetDefault)}
-                    className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-xs font-semibold text-amber-300"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Reset to Bundled Collection.csv</span>
-                  </button>
-                )}
-
-                {activeLibraryUser && activeLibraryUser.id !== currentUser.id && (
-                  <button
-                    onClick={() => handleAction(onReturnToMyLibrary)}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-xs font-bold text-white shadow-md"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    <span>Return to My Personal Library</span>
-                  </button>
                 )}
               </div>
             </div>

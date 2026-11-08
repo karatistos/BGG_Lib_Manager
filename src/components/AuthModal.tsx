@@ -12,6 +12,8 @@ import {
   deleteUserByAdmin,
   resetUserPasswordByAdmin,
   isSuperAdmin,
+  logoutUser,
+  setAdminSessionAuth,
 } from '../services/communityStorage';
 import {
   X,
@@ -27,6 +29,8 @@ import {
   Trash2,
   Crown,
   Key,
+  LogOut,
+  LogIn,
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -42,8 +46,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   currentUser,
   onUserChange,
 }) => {
+  const isGuest = currentUser.id === 'guest';
   const isAdmin = isSuperAdmin(currentUser);
-  const [tab, setTab] = useState<'profile' | 'switch' | 'new' | 'admin'>('profile');
+  const [tab, setTab] = useState<'profile' | 'switch' | 'new' | 'admin'>(() => {
+    return isGuest ? 'switch' : 'profile';
+  });
   const [users, setUsers] = useState<UserProfile[]>(getAllUsers());
 
   // Edit current profile state
@@ -77,8 +84,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleLogout = () => {
+    const guest = logoutUser();
+    onUserChange(guest);
+    onClose();
+  };
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isGuest) return;
+
     let passwordHash = currentUser.passwordHash;
     if (newPassword.trim()) {
       passwordHash = await hashPassword(newPassword.trim());
@@ -112,7 +127,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (!targetUser) return;
 
     if (!targetUser.passwordHash) {
-      // User has no password protection, switch directly
       performSwitch(targetUser);
       return;
     }
@@ -122,9 +136,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       const isValid = await verifyPassword(switchPin, targetUser.passwordHash);
       if (isValid) {
+        if (targetUser.id === 'user_admin' || targetUser.role === 'admin') {
+          setAdminSessionAuth(true);
+        }
         performSwitch(targetUser);
       } else {
-        setSwitchError('Incorrect PIN/Password for this profile.');
+        setSwitchError('Incorrect PIN or Password for this profile.');
       }
     } finally {
       setIsVerifying(false);
@@ -147,10 +164,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setRegisterError(null);
     if (!newUsername.trim()) return;
 
-    // Validate Anti-Flood Registration Key
+    // Validate Anti-Flood Registration Key against stored secret
     const currentClubKey = getClubEntryKey().trim();
     if (clubEntryKeyInput.trim().toUpperCase() !== currentClubKey.toUpperCase()) {
-      setRegisterError(`Invalid Club Registration Key. Please ask the club administrator for the entry key.`);
+      setRegisterError(`Invalid Club Registration Key. Please ask the club administrator for the secret invitation key.`);
       return;
     }
 
@@ -212,56 +229,85 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <div
               className={`w-9 h-9 rounded-xl ${currentUser.avatarColor} flex items-center justify-center font-bold text-sm shadow-md`}
             >
-              {currentUser.displayName.slice(0, 2).toUpperCase()}
+              {isGuest ? '?' : currentUser.displayName.slice(0, 2).toUpperCase()}
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <h3 className="font-bold text-white text-base">User Account & Security</h3>
+                <h3 className="font-bold text-white text-base">
+                  {isGuest ? 'Club Access & Login' : 'User Account & Security'}
+                </h3>
                 {isAdmin && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/20 text-orange-400 border border-orange-500/40 flex items-center gap-1">
                     <Crown className="w-3 h-3 text-orange-400" /> Super Admin
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400">Password protection & library permissions</p>
+              <p className="text-xs text-slate-400">
+                {isGuest ? 'Log in with your profile or create an account' : 'PIN protection & library permissions'}
+              </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+
+          <div className="flex items-center gap-2">
+            {!isGuest && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold text-rose-400 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 transition-all shadow-sm"
+                title="Log out of this profile"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Log Out</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Navigation Tabs */}
         <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-semibold overflow-x-auto">
-          <button
-            onClick={() => {
-              setTab('profile');
-              setTargetUser(null);
-            }}
-            className={`flex-1 py-1.5 px-3 rounded-lg transition-all shrink-0 ${
-              tab === 'profile'
-                ? 'bg-orange-500 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            My Profile
-          </button>
+          {!isGuest && (
+            <button
+              onClick={() => {
+                setTab('profile');
+                setTargetUser(null);
+              }}
+              className={`flex-1 py-1.5 px-3 rounded-lg transition-all shrink-0 ${
+                tab === 'profile'
+                  ? 'bg-orange-500 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              My Profile
+            </button>
+          )}
+
           <button
             onClick={() => {
               setTab('switch');
               setTargetUser(null);
             }}
-            className={`flex-1 py-1.5 px-3 rounded-lg transition-all shrink-0 ${
+            className={`flex-1 py-1.5 px-3 rounded-lg transition-all shrink-0 flex items-center justify-center gap-1.5 ${
               tab === 'switch'
                 ? 'bg-orange-500 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            Switch User ({users.length})
+            {isGuest ? (
+              <>
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Log In ({users.length} Profiles)</span>
+              </>
+            ) : (
+              <span>Switch User ({users.length})</span>
+            )}
           </button>
+
           <button
             onClick={() => {
               setTab('new');
@@ -276,6 +322,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <UserPlus className="w-3.5 h-3.5" />
             <span>Create Account</span>
           </button>
+
           {isAdmin && (
             <button
               onClick={() => {
@@ -294,8 +341,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
         </div>
 
-        {/* TAB 1: EDIT PROFILE & SECURITY */}
-        {tab === 'profile' && (
+        {/* TAB 1: EDIT PROFILE & SECURITY (Only for logged-in users) */}
+        {!isGuest && tab === 'profile' && (
           <form onSubmit={handleSaveProfile} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300">Display Name</label>
@@ -403,18 +450,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </form>
         )}
 
-        {/* TAB 2: SWITCH USER WITH PASSWORD AUTHENTICATION */}
+        {/* TAB 2: SWITCH USER / LOG IN WITH PASSWORD AUTHENTICATION */}
         {tab === 'switch' && (
           <div className="space-y-3">
             {!targetUser ? (
               <>
                 <p className="text-xs text-slate-400">
-                  Select a profile to switch accounts. Password-protected profiles will prompt for their PIN.
+                  Select your profile to log in. Password-protected profiles will prompt for their PIN or master password.
                 </p>
                 <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                   {users.map((u) => {
-                    const isActive = u.id === currentUser.id;
-                    const isUserAdmin = isSuperAdmin(u);
+                    const isActive = u.id === currentUser.id && !isGuest;
+                    const isUserAdmin = u.id === 'user_admin' || u.role === 'admin';
                     return (
                       <div
                         key={u.id}
@@ -469,7 +516,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <div className="flex items-center gap-2">
                     <KeyRound className="w-4 h-4 text-orange-400" />
                     <span className="text-xs font-bold text-white">
-                      Enter PIN for {targetUser.displayName}
+                      {targetUser.id === 'user_admin'
+                        ? 'Enter Master Password for Super Admin'
+                        : `Enter PIN for ${targetUser.displayName}`}
                     </span>
                   </div>
                   <button
@@ -486,16 +535,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     type="password"
                     value={switchPin}
                     onChange={(e) => setSwitchPin(e.target.value)}
-                    placeholder="Enter PIN / Password..."
+                    placeholder={
+                      targetUser.id === 'user_admin'
+                        ? 'Master password...'
+                        : 'Enter 4-digit PIN / Password...'
+                    }
                     autoFocus
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-orange-500 font-mono tracking-widest text-center"
                     required
                   />
                   <div className="flex items-center justify-between text-[11px] text-slate-500">
-                    {isSuperAdmin(targetUser) ? (
-                      <span>🛡️ Super Admin Master Key required</span>
+                    {targetUser.id === 'user_admin' ? (
+                      <span className="text-rose-400">🛡️ Super Admin master key required</span>
                     ) : (
-                      <span>💡 Demo profiles default PIN: <strong className="text-slate-400">1234</strong></span>
+                      <span>Demo profiles default PIN: <strong className="text-slate-400">1234</strong></span>
                     )}
                   </div>
                 </div>
@@ -520,7 +573,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     disabled={isVerifying || !switchPin.trim()}
                     className="px-4 py-1.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-md"
                   >
-                    {isVerifying ? 'Verifying...' : 'Unlock & Switch'}
+                    {isVerifying ? 'Verifying...' : 'Unlock & Log In'}
                   </button>
                 </div>
               </form>
@@ -532,25 +585,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {tab === 'new' && (
           <form onSubmit={handleCreateUser} className="space-y-4">
             <p className="text-xs text-slate-400">
-              Create a protected profile. A Club Invitation Key is required to prevent flood abuse.
+              Create a protected profile. A secret Club Registration Key is required to prevent flood abuse.
             </p>
 
-            {/* Anti-Flood Entry Key */}
+            {/* Anti-Flood Entry Key (Secret masked password input) */}
             <div className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/30 space-y-1.5">
               <label className="text-xs font-bold text-orange-300 flex items-center gap-1.5">
                 <Key className="w-3.5 h-3.5 text-orange-400" />
-                <span>Club Invitation / Entry Key *</span>
+                <span>Club Registration Entry Key *</span>
               </label>
               <input
-                type="text"
+                type="password"
                 value={clubEntryKeyInput}
                 onChange={(e) => setClubEntryKeyInput(e.target.value)}
-                placeholder="Enter club invitation key..."
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-orange-500 uppercase font-mono tracking-wider"
+                placeholder="Enter secret invitation key..."
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-orange-500 font-mono tracking-wider"
                 required
               />
               <p className="text-[11px] text-slate-400">
-                Obtain this key from the club organizer (Carlos M.) to register your profile.
+                Anti-flood protection. Obtain this secret key privately from the club organizer (Carlos M.).
               </p>
             </div>
 
@@ -625,7 +678,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </form>
         )}
 
-        {/* TAB 4: SUPER ADMIN CONTROL PANEL (Only for isSuperAdmin) */}
+        {/* TAB 4: SUPER ADMIN CONTROL PANEL (Only visible when logged in as verified Super Admin) */}
         {tab === 'admin' && isAdmin && (
           <div className="space-y-5">
             {/* Club Registration Entry Key Management */}
@@ -633,11 +686,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="flex items-center gap-2">
                 <Shield className="w-4 h-4 text-rose-400" />
                 <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Club Anti-Flood Registration Key
+                  Club Anti-Flood Registration Key (Confidential)
                 </h4>
               </div>
               <p className="text-xs text-slate-400">
-                New users must provide this key to create an account. Change it anytime to prevent spam.
+                This secret key is only visible to you as Super Admin. Share it privately with trusted players so they can register.
               </p>
               <form onSubmit={handleSaveAdminClubKey} className="flex gap-2">
                 <input
@@ -675,7 +728,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                 {users.map((u) => {
-                  const isTargetAdmin = isSuperAdmin(u);
+                  const isTargetAdmin = u.id === 'user_admin' || u.role === 'admin';
                   const isCurrent = u.id === currentUser.id;
 
                   return (
@@ -745,7 +798,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                               setResetPinUserId(u.id);
                               setResetPinValue('');
                             }}
-                            className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-700 transition-colors"
+                            className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-300 bg-slate-900 hover:bg-slate-850 border border-slate-700 transition-colors"
                             title="Reset this user's password"
                           >
                             Reset PIN
