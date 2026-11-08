@@ -39,7 +39,8 @@ import { AnalyticsModal } from './components/AnalyticsModal';
 import { AuthModal } from './components/AuthModal';
 import { CommunityModal } from './components/CommunityModal';
 import { MeetingModal } from './components/MeetingModal';
-import { SlidersHorizontal, Lock, ArrowLeft, Globe } from 'lucide-react';
+import { MobileDrawer } from './components/MobileDrawer';
+import { SlidersHorizontal, Lock, ArrowLeft, Globe, Dices } from 'lucide-react';
 
 const INITIAL_FILTERS: FilterState = {
   searchQuery: '',
@@ -96,6 +97,9 @@ export const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserProfile>(() => getCurrentUser());
   const [activeLibraryUser, setActiveLibraryUser] = useState<UserProfile | null>(null);
   const [libraryScope, setLibraryScope] = useState<LibraryScope>('user');
+
+  // Mobile Drawer state
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
   // Community & Meeting & Auth Modals
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -334,6 +338,12 @@ export const App: React.FC = () => {
   const cachedMetadataMap = getCachedMetadataMap();
   const cachedCount = Object.keys(cachedMetadataMap).length;
   const isReadOnlyLibrary = activeLibraryUser !== null && activeLibraryUser.id !== currentUser.id;
+  const activeFiltersCount =
+    (filters.selectedMechanics.length > 0 ? 1 : 0) +
+    (filters.playerCount ? 1 : 0) +
+    (filters.itemType !== 'standalone' ? 1 : 0) +
+    (filters.durationBracket !== 'all' ? 1 : 0) +
+    (filters.weightBrackets.length > 0 ? 1 : 0);
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col font-sans">
@@ -373,24 +383,26 @@ export const App: React.FC = () => {
           }
         }}
         groupGamesCount={groupGames.length}
+        onOpenMobileDrawer={() => setIsMobileDrawerOpen(true)}
       />
 
       {/* Club Super Library Banner */}
       {libraryScope === 'group' && (
-        <div className="bg-emerald-950/70 border-b border-emerald-500/30 px-4 py-2.5 backdrop-blur-md animate-in slide-in-from-top-1 duration-200">
-          <div className="max-w-[1700px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 text-emerald-200">
+        <div className="bg-emerald-950/70 border-b border-emerald-500/30 px-3 sm:px-4 py-2 backdrop-blur-md animate-in slide-in-from-top-1 duration-200">
+          <div className="max-w-[1700px] mx-auto flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 text-emerald-200 min-w-0">
               <Globe className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>
-                <strong>Club Super Collection</strong> ({groupGames.length} unique titles across public members) • Combined library from all shared club members. Cards display owner chips showing who owns each copy.
+              <span className="truncate">
+                <strong>Club Super Collection</strong> ({groupGames.length} titles) • Combined public shelf
               </span>
             </div>
             <button
               onClick={() => setLibraryScope('user')}
-              className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold flex items-center gap-1.5 transition-all shadow-sm shrink-0"
+              className="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1 transition-all shadow-sm shrink-0"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to My Library</span>
+              <ArrowLeft className="w-3 h-3" />
+              <span className="hidden sm:inline">Back to My Library</span>
+              <span className="sm:hidden">Mine</span>
             </button>
           </div>
         </div>
@@ -398,46 +410,67 @@ export const App: React.FC = () => {
 
       {/* Read-Only Banner when browsing another member's library */}
       {libraryScope === 'user' && isReadOnlyLibrary && activeLibraryUser && (
-        <div className="bg-amber-950/70 border-b border-amber-500/30 px-4 py-2.5 backdrop-blur-md animate-in slide-in-from-top-1 duration-200">
-          <div className="max-w-[1700px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 text-amber-200">
+        <div className="bg-amber-950/70 border-b border-amber-500/30 px-3 sm:px-4 py-2 backdrop-blur-md animate-in slide-in-from-top-1 duration-200">
+          <div className="max-w-[1700px] mx-auto flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 text-amber-200 min-w-0">
               <Lock className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>
-                Viewing <strong>{activeLibraryUser.displayName}'s Collection</strong> ({userGames.length} games) •{' '}
-                <span className="text-amber-300 font-semibold">🔒 Read-Only</span> — You can browse, filter, and view rulebooks/notes, but cannot edit this library.
+              <span className="truncate">
+                Browsing <strong>{activeLibraryUser.displayName}</strong> ({userGames.length} games) • 🔒 Read-Only
               </span>
             </div>
             <button
               onClick={handleReturnToMyLibrary}
-              className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold flex items-center gap-1.5 transition-all shadow-sm shrink-0"
+              className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1 transition-all shadow-sm shrink-0"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Return to My Library</span>
+              <ArrowLeft className="w-3 h-3" />
+              <span className="hidden sm:inline">Back to My Library</span>
+              <span className="sm:hidden">Mine</span>
             </button>
           </div>
         </div>
       )}
 
       {/* 2. Main Content Container */}
-      <main className="max-w-[1700px] w-full mx-auto px-4 py-5 flex-1 space-y-5">
-        {/* Collection Pulse / Metrics Summary Bar */}
+      <main className="max-w-[1700px] w-full mx-auto px-3 sm:px-4 py-3 sm:py-5 flex-1 space-y-4 sm:space-y-5">
+        {/* Collection Pulse / Metrics Summary Bar (Responsive: 1-line ticker on mobile, full grid on desktop) */}
         <MetricsBar
           metrics={collectionMetrics}
           onSelectGame={(g) => setSelectedGame(g)}
+          onOpenDrawer={() => setIsMobileDrawerOpen(true)}
         />
 
-        {/* Mobile Filter Toggle Button */}
-        <div className="lg:hidden flex items-center justify-between">
+        {/* Mobile Filter & Quick Action Row */}
+        <div className="lg:hidden flex items-center justify-between gap-2">
           <button
             onClick={() => setMobileFilterOpen(!mobileFilterOpen)}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-200"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
+              mobileFilterOpen
+                ? 'bg-orange-500 text-white border-orange-500'
+                : 'bg-slate-900 border-slate-800 text-slate-200 hover:text-white'
+            }`}
           >
-            <SlidersHorizontal className="w-4 h-4 text-orange-400" />
-            <span>{mobileFilterOpen ? 'Hide Filters' : 'Show Filters & Facets'}</span>
+            <SlidersHorizontal className="w-3.5 h-3.5 text-orange-400" />
+            <span>{mobileFilterOpen ? 'Hide Filters' : 'Filters'}</span>
+            {activeFiltersCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-orange-500 text-white font-bold">
+                {activeFiltersCount}
+              </span>
+            )}
           </button>
-          <span className="text-xs text-slate-400">
-            {filteredGames.length} of {activeGames.length} games
-          </span>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsRandomModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 text-white text-xs font-bold shadow-md shadow-orange-500/20"
+              title="Pick a random game for game night"
+            >
+              <Dices className="w-3.5 h-3.5" />
+              <span>Pick Game</span>
+            </button>
+            <span className="text-xs text-slate-400 font-mono">
+              {filteredGames.length} / {activeGames.length}
+            </span>
+          </div>
         </div>
 
         {/* Dual Pane Layout */}
@@ -480,7 +513,47 @@ export const App: React.FC = () => {
         </div>
       </main>
 
-      {/* 3. Centered Large Game Detail Modal */}
+      {/* 3. Lateral Deployable Panel (Smartphone Menu & Dashboard Drawer) */}
+      <MobileDrawer
+        isOpen={isMobileDrawerOpen}
+        onClose={() => setIsMobileDrawerOpen(false)}
+        currentUser={currentUser}
+        activeLibraryUser={activeLibraryUser}
+        libraryScope={libraryScope}
+        onLibraryScopeChange={(scope) => {
+          setLibraryScope(scope);
+          if (scope === 'group') {
+            setActiveLibraryUser(null);
+          }
+        }}
+        metrics={collectionMetrics}
+        onSelectGame={(g) => setSelectedGame(g)}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onOpenCommunityModal={(tab = 'members') => {
+          setCommunityTab(tab);
+          setIsCommunityModalOpen(true);
+        }}
+        onOpenMeetingModal={() => setIsMeetingModalOpen(true)}
+        onOpenRandomModal={() => setIsRandomModalOpen(true)}
+        onOpenAnalyticsModal={() => setIsAnalyticsOpen(true)}
+        onOpenSyncModal={() => setIsSyncModalOpen(true)}
+        cachedCount={cachedCount}
+        upcomingMeetingsCount={getAllMeetings().length}
+        messagesCount={getAllMessages().length}
+        sortField={sortField}
+        sortOrder={sortOrder}
+        onSortFieldChange={handleSortFieldChange}
+        onSortOrderToggle={() => setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        onFileUpload={handleFileUpload}
+        isCustomLoaded={isCustomLoaded}
+        onResetDefault={handleResetDefault}
+        onReturnToMyLibrary={handleReturnToMyLibrary}
+        groupGamesCount={groupGames.length}
+      />
+
+      {/* 4. Centered Large Game Detail Modal */}
       <DetailModal
         game={selectedGame}
         onClose={() => setSelectedGame(null)}
@@ -491,7 +564,7 @@ export const App: React.FC = () => {
         ownerName={activeLibraryUser?.displayName || currentUser.displayName}
       />
 
-      {/* 4. Game Night Picker (Dice roll with in-modal group filters) */}
+      {/* 5. Game Night Picker (Dice roll with in-modal group filters) */}
       <RandomGameModal
         allGames={activeGames}
         isOpen={isRandomModalOpen}
@@ -501,7 +574,7 @@ export const App: React.FC = () => {
         initialOnlyBest={filters.onlyBestPlayers}
       />
 
-      {/* 5. Collection Shelf Analytics Modal */}
+      {/* 6. Collection Shelf Analytics Modal */}
       <AnalyticsModal
         games={activeGames}
         metrics={collectionMetrics}
@@ -512,7 +585,7 @@ export const App: React.FC = () => {
         onFilterByMechanic={handleSelectMechanic}
       />
 
-      {/* 6. BGG Box Art & Mechanics Sync Dialog */}
+      {/* 7. BGG Box Art & Mechanics Sync Dialog */}
       <BggSyncModal
         games={activeGames}
         isOpen={isSyncModalOpen}
@@ -520,7 +593,7 @@ export const App: React.FC = () => {
         onSyncComplete={handleSyncComplete}
       />
 
-      {/* 7. User Authentication & Profile Modal */}
+      {/* 8. User Authentication & Profile Modal */}
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
@@ -528,7 +601,7 @@ export const App: React.FC = () => {
         onUserChange={handleUserChange}
       />
 
-      {/* 8. Game Group Community Directory & Messages Hub */}
+      {/* 9. Game Group Community Directory & Messages Hub */}
       <CommunityModal
         isOpen={isCommunityModalOpen}
         onClose={() => setIsCommunityModalOpen(false)}
@@ -538,7 +611,7 @@ export const App: React.FC = () => {
         initialTab={communityTab}
       />
 
-      {/* 9. Game Night Meetup Scheduler & RSVPs Modal */}
+      {/* 10. Game Night Meetup Scheduler & RSVPs Modal */}
       <MeetingModal
         isOpen={isMeetingModalOpen}
         onClose={() => setIsMeetingModalOpen(false)}
