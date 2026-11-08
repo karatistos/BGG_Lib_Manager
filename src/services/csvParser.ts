@@ -53,12 +53,78 @@ function getField(row: Record<string, string>, ...keys: string[]): string {
   return '';
 }
 
+function cleanRawCsvText(csvContent: string): string {
+  let text = csvContent.trim();
+
+  // 1. Strip UTF-8 BOM
+  if (text.charCodeAt(0) === 0xFEFF) {
+    text = text.slice(1).trim();
+  }
+
+  // 2. Remove Excel `sep=,` or `sep=;` directive on line 1
+  const firstLineBreak = text.indexOf('\n');
+  if (firstLineBreak !== -1) {
+    const firstLine = text.slice(0, firstLineBreak).trim().toLowerCase();
+    if (firstLine.startsWith('sep=')) {
+      text = text.slice(firstLineBreak + 1).trim();
+    }
+  }
+
+  // 3. Detect Excel Column-A wrapper (where entire rows were wrapped in outer quotes: "col1,col2,...")
+  const checkLineBreak = text.indexOf('\n');
+  const checkLine = (checkLineBreak !== -1 ? text.slice(0, checkLineBreak) : text).trim();
+  if (checkLine.startsWith('"') && checkLine.endsWith('"') && (checkLine.includes(',') || checkLine.includes(';'))) {
+    const singleColParse = Papa.parse<string[]>(text, { header: false, skipEmptyLines: 'greedy' });
+    if (singleColParse.data.length > 0 && singleColParse.data[0].length === 1) {
+      text = singleColParse.data.map(r => r[0]).join('\n');
+    }
+  }
+
+  return text;
+}
+
 export function parseBggCsv(csvContent: string): GameRecord[] {
-  const result = Papa.parse<Record<string, string>>(csvContent.trim(), {
+  const cleanedText = cleanRawCsvText(csvContent);
+
+  // Determine best delimiter by checking comma, semicolon, and tab frequencies
+  const sample = cleanedText.slice(0, 10000);
+  const commaCount = (sample.match(/,/g) || []).length;
+  const semiCount = (sample.match(/;/g) || []).length;
+  const tabCount = (sample.match(/\t/g) || []).length;
+
+  let delimiter = ',';
+  if (semiCount > commaCount && semiCount > tabCount) {
+    delimiter = ';';
+  } else if (tabCount > commaCount && tabCount > semiCount) {
+    delimiter = '\t';
+  }
+
+  let result = Papa.parse<Record<string, string>>(cleanedText, {
     header: true,
+    delimiter,
     skipEmptyLines: 'greedy',
     dynamicTyping: false,
   });
+
+  // Fallback: If only 1 field was found but it contains commas or semicolons, retry with the opposite delimiter
+  if (result.meta.fields && result.meta.fields.length === 1) {
+    const f = result.meta.fields[0];
+    if (f.includes(',') && delimiter !== ',') {
+      result = Papa.parse<Record<string, string>>(cleanedText, {
+        header: true,
+        delimiter: ',',
+        skipEmptyLines: 'greedy',
+        dynamicTyping: false,
+      });
+    } else if (f.includes(';') && delimiter !== ';') {
+      result = Papa.parse<Record<string, string>>(cleanedText, {
+        header: true,
+        delimiter: ';',
+        skipEmptyLines: 'greedy',
+        dynamicTyping: false,
+      });
+    }
+  }
 
   if (result.errors && result.errors.length > 0) {
     console.warn('CSV Parse Warnings:', result.errors.slice(0, 5));
@@ -67,10 +133,26 @@ export function parseBggCsv(csvContent: string): GameRecord[] {
   const records: GameRecord[] = [];
 
   for (const row of result.data) {
-    const name = getField(row, 'objectname', 'originalname', 'name', 'title', 'game');
+    let name = getField(row, 'objectname', 'originalname', 'name', 'title', 'game');
     if (!name) continue;
 
-    const id = parseInt(getField(row, 'objectid', 'id', 'gameid', 'collid', 'itemid') || '0', 10);
+    // Safety net: if name contains unparsed CSV tokens (e.g. `3 Chapters,"423517",...`)
+    if (name.includes(',"') || name.includes('","')) {
+      const match = name.match(/^"?(.*?)"?,/);
+      if (match && match[1]) {
+        name = match[1].replace(/^"|"$/g, '').trim();
+      }
+    }
+
+    let id = parseInt(getField(row, 'objectid', 'id', 'gameid', 'collid', 'itemid') || '0', 10);
+    // If id failed to parse from row headers, search for any positive number in row or extract from name string
+    if ((isNaN(id) || id <= 0) && row) {
+      const rowStr = JSON.stringify(row);
+      const idMatch = rowStr.match(/"(\d{4,8})"/);
+      if (idMatch && idMatch[1]) {
+        id = parseInt(idMatch[1], 10);
+      }
+    }
     const yearRaw = parseInt(getField(row, 'yearpublished', 'year', 'year_published') || '0', 10);
     const year = yearRaw > 0 ? yearRaw : null;
 

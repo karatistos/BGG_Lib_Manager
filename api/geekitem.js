@@ -1,5 +1,11 @@
 export default async function handler(req, res) {
-  const { id } = req.query;
+  let id = req.query?.id || req.query?.objectid;
+  if (!id && req.url) {
+    try {
+      const urlObj = new URL(req.url, 'http://localhost');
+      id = urlObj.searchParams.get('id') || urlObj.searchParams.get('objectid');
+    } catch (_) {}
+  }
   if (!id) {
     return res.status(400).json({ error: 'Missing objectid' });
   }
@@ -25,3 +31,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
